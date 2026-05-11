@@ -111,38 +111,17 @@ All critical and high-severity findings have been remediated and verified throug
 
 ### 2.2 Architecture Diagram
 
-> *Include a labeled diagram here showing frontend, backend, database, and external services. A Mermaid diagram or image is acceptable.*
+The NexusPortal application follows a containerized three-tier architecture, ensuring isolation between the presentation, logic, and data layers.
 
-```
-+------------------+       HTTPS (TLS)       +---------------------------+
-|   User Browser   | <---------------------> |   Flask 3.1 Web Server    |
-| (HTML + Jinja2)  |                         | (Python 3.11, Gunicorn)   |
-+------------------+                         +-----------+---------------+
-                                                         |
-                                              +----------v-----------+
-                                              |    SQLite Database   |
-                                              |  (app.db — projects, |
-                                              |   tasks, users,      |
-                                              |   feedback tables)   |
-                                              +----------------------+
-
-Docker Compose
-  web  (Flask app container — port 443)
-  db   (SQLite volume mount)
-
-GitHub Actions Pipeline
-  SAST  : Bandit + Semgrep
-  SCA   : pip-audit / Safety
-  DAST  : OWASP ZAP (Active Scan against localhost)
-```
-
-> **[Replace with a proper labeled DFD image in the final submission — use draw.io or Mermaid]**
+![NexusPortal Architecture Diagram](docs/images/architecture_diagram.png)
 
 ---
 
 ### 2.3 Data Flow Diagram (DFD)
 
-> *Provide a Level 0 or Level 1 DFD showing actors, processes, data stores, and data flows. Label trust boundaries clearly.*
+This DFD illustrates how data moves through the system, crossing multiple trust boundaries from unauthenticated input to persistent storage.
+
+![NexusPortal Data Flow Diagram (DFD)](docs/images/dfd_diagram.png)
 
 **Actors:**
 - Unauthenticated User (browser — login/register only)
@@ -174,66 +153,79 @@ GitHub Actions Pipeline
 
 ### 2.5 STRIDE Threat Model
 
-> *STRIDE applied per component. Each row identifies a threat category, the affected component, the threat description, and the current mitigation.*
+The STRIDE methodology was applied to each major component of the NexusPortal architecture to identify potential threats and ensure comprehensive mitigation.
 
 | Component | S | T | R | I | D | E |
 |-----------|---|---|---|---|---|---|
-| Login Form | Session fixation / credential stuffing | — | — | — | — | — |
-| Flask Session Cookie | — | Cookie tampering if `SECRET_KEY` is weak | — | — | — | — |
-| Admin Panel (`/admin/*`) | — | — | — | Privilege escalation — Member/Viewer accessing admin routes | — | — |
-| Project/Task CRUD | — | — | — | IDOR — Member editing another member's resources | — | — |
-| SQLite Queries | SQL Injection via unsanitised input | — | — | — | — | — |
-| Jinja2 Templates | — | — | — | — | — | Reflected/Stored XSS via unescaped template variables |
-| Error Pages | — | — | — | Stack trace disclosure in `DEBUG=True` | — | — |
-| Dependencies | — | — | — | — | — | Known CVEs in pinned Python packages |
+| **Web Interface** | Phishing / Spoofing | DOM Tampering | - | - | Browser Referrer Leak | XSS / Clickjacking |
+| **Auth Logic** | Credential Stuffing | Session Forgery | Session Hijacking | - | Password Leakage | Privilege Escalation |
+| **Controllers** | - | Parameter Tampering | Log Erasure | IDOR / Data Deletion | - | Unauthorized Access |
+| **Database** | SQL Injection | Data Corruption | Audit Log Bypass | Data Loss | PII Exposure | DB Account Escalation |
 
-> **Full STRIDE Table:**
+#### Detailed Threat Table
 
 | # | Component | Threat Category | Threat Description | Severity | Mitigation | Status |
 |---|-----------|----------------|--------------------|----------|-----------|--------|
-| T-01 | Login Form | Spoofing | SQL Injection in login form allows authentication bypass | Critical | Parameterized queries / SQLAlchemy ORM | Mitigated |
-| T-02 | Flask Session Cookie | Tampering | Weak or hardcoded `SECRET_KEY` allows session forgery | Critical | Strong random `SECRET_KEY` via env variable | Mitigated |
-| T-03 | Admin Panel | Elevation of Privilege | Member or Viewer role can directly request `/admin/*` routes | Critical | Server-side `@admin_required` route decorator | Mitigated |
-| T-04 | Project/Task CRUD | Information Disclosure | Member can access or modify another member's project via IDOR (`/project/<id>`) | High | Ownership check: `project.owner_id == current_user.id` | Mitigated |
-| T-05 | Jinja2 Templates | Elevation of Privilege | Stored XSS via unescaped user-supplied content in project/task fields | High | Jinja2 autoescaping enabled; manual `\|e` filter on dynamic fields | Mitigated |
-| T-06 | Error Pages | Information Disclosure | Flask `DEBUG=True` exposes full stack traces and environment variables | Medium | `DEBUG=False` in production; custom error handlers | Mitigated |
-| T-07 | Dependencies | Denial of Service | Outdated Python packages with known CVEs (e.g., Flask, Werkzeug) | Medium | `pip-audit` in pipeline; `requirements.txt` pinned and audited | Mitigated |
-| T-08 | Registration Form | Spoofing | No rate limiting on registration; allows bulk account creation | Low | Flask-Limiter on `/register` endpoint | Mitigated |
+| T-01 | Auth | Spoofing | SQL Injection in login form allows authentication bypass | Critical | Parameterized queries implemented | Mitigated |
+| T-02 | Session | Tampering | Ephemeral or hardcoded `SECRET_KEY` allows session forgery | Critical | Persistent, environment-injected secret key | Mitigated |
+| T-03 | RBAC | Elevation of Privilege | Member/Viewer role accessing admin routes via direct URL | Critical | Server-side `@roles_required` decorators | Mitigated |
+| T-04 | CRUD | Information Disclosure | IDOR via `/project/<id>` allows viewing others' data | High | Server-side ownership validation logic | Mitigated |
+| T-05 | Templates | Elevation of Privilege | Stored XSS via project titles or feedback entries | High | Jinja2 autoescaping + Content Security Policy | Mitigated |
+| T-06 | Logs | Information Disclosure | Flask `DEBUG=True` exposes env vars on error pages | Medium | `DEBUG=False` enforced in production | Mitigated |
+| T-07 | Packages | Denial of Service | Vulnerable dependencies (Werkzeug/Flask) | Medium | `pip-audit` enforced in CI/CD pipeline | Mitigated |
+| T-08 | Interface | Elevation of Privilege | Clickjacking via transparent overlay on project delete | Medium | `X-Frame-Options: DENY` header implemented | Mitigated |
+| T-09 | Auth | Spoofing | Username enumeration via registration error discrepancy | Medium | Generic success messages for all attempts | Mitigated |
+| T-10 | Network | Information Disclosure | Session cookie transmitted over plain HTTP | Medium | `SESSION_COOKIE_SECURE=True` enforced | Mitigated |
 
 ---
 
-### 2.6 DREAD Risk Scoring
+### 2.6 DREAD Risk Scoring & Prioritization
 
-| Threat ID | Threat | D | R | E | A | D | Score | Priority |
+The DREAD model provides a quantitative risk assessment to prioritize remediation efforts.
+
+| Threat ID | Threat | D | R | E | A | D | Total | Priority |
 |-----------|--------|---|---|---|---|---|-------|----------|
-| T-01 | SQL Injection – Login | 9 | 9 | 9 | 10 | 9 | **46** | Critical |
-| T-02 | Weak Flask `SECRET_KEY` | 9 | 8 | 7 | 10 | 7 | **41** | Critical |
-| T-03 | Broken Access Control – Admin Routes | 9 | 8 | 8 | 9 | 8 | **42** | Critical |
-| T-04 | IDOR – Project/Task Ownership | 7 | 8 | 8 | 7 | 7 | **37** | High |
-| T-05 | Stored XSS – Project/Task Fields | 8 | 7 | 7 | 8 | 6 | **36** | High |
-| T-06 | DEBUG=True Stack Trace Disclosure | 5 | 9 | 5 | 5 | 8 | **32** | Medium |
-| T-07 | Vulnerable Python Dependencies | 5 | 4 | 5 | 4 | 4 | **22** | Medium |
-| T-08 | No Rate Limiting on Registration | 3 | 7 | 7 | 3 | 6 | **26** | Low |
+| **T-01** | SQL Injection (Auth Bypass) | 10 | 9 | 10 | 10 | 9 | **48** | 🔴 Critical |
+| **T-02** | Session Forgery (Secret Key) | 9 | 9 | 8 | 10 | 8 | **44** | 🔴 Critical |
+| **T-03** | Admin Route Bypass | 10 | 8 | 9 | 10 | 7 | **44** | 🔴 Critical |
+| **T-04** | IDOR (Project Ownership) | 7 | 8 | 9 | 7 | 8 | **39** | 🟠 High |
+| **T-05** | Stored XSS | 8 | 7 | 8 | 8 | 7 | **38** | 🟠 High |
+| **T-10** | Cleartext Session Cookies | 9 | 7 | 6 | 10 | 6 | **38** | 🟠 High |
+| **T-09** | Username Enumeration | 4 | 10 | 10 | 10 | 9 | **43** | 🟠 High |
+| **T-08** | Clickjacking | 6 | 8 | 8 | 8 | 7 | **37** | 🟡 Medium |
+| **T-07** | Vulnerable Dependencies | 5 | 5 | 5 | 4 | 6 | **25** | 🟡 Medium |
 
-> *D = Damage, R = Reproducibility, E = Exploitability, A = Affected Users, D = Discoverability. Scored 1–10.*
+#### Threat Prioritization Matrix
+
+| Impact \ Likelihood | Low | Medium | High |
+|:---:|:---:|:---:|:---:|
+| **High** | T-07 | T-06, T-08 | **T-01, T-02, T-03** |
+| **Medium** | - | T-05, T-10 | **T-04, T-09** |
+| **Low** | - | - | - |
 
 ---
 
-### 2.7 Attack Surface
+### 2.7 Attack Surface Mapping
 
-| Attack Vector | Endpoint / Area | Required Role | Mapped to DAST Scope |
-|--------------|-----------------|---------------|----------------------|
-| Authentication | `POST /login` | Unauthenticated | ✅ Yes |
-| Registration | `POST /register` | Unauthenticated | ✅ Yes |
-| Admin – User Management | `GET/POST /admin/users` | Admin only | ✅ Yes |
-| Admin – Role Assignment | `POST /admin/users/<id>/role` | Admin only | ✅ Yes |
-| Admin – Feedback View | `GET /admin/feedback` | Admin only | ✅ Yes |
-| Project CRUD | `GET/POST/PUT/DELETE /projects/<id>` | Member (own) / Admin (all) | ✅ Yes |
-| Task CRUD | `GET/POST/PUT/DELETE /tasks/<id>` | Member (own) / Admin (all) | ✅ Yes |
-| Project View (read-only) | `GET /projects` | Viewer, Member, Admin | ✅ Yes |
-| Search / Filter | `GET /projects?q=` | Viewer, Member, Admin | ✅ Yes |
-| Session Management | `GET /logout` | Any authenticated | ✅ Yes |
-| Static Assets | `/static/*` | Public | ⬜ Out of scope |
+This table explicitly maps application features to the scope of automated and manual testing.
+
+| Attack Vector | Endpoint / Area | Attack Goal | Security Control | DAST Scope |
+|:---:|---|---|---|:---:|
+| **Inbound Web** | `POST /login` | Bypass Auth / Brute Force | Rate Limiter + Parameterized SQL | ✅ |
+| **Registration** | `POST /register` | Enumerate Users / Denial of Service | Generic Response + Rate Limiter | ✅ |
+| **Admin Panel** | `/admin/*` | Privilege Escalation | `@admin_required` Decorator | ✅ |
+| **Project CRUD** | `/projects/<id>` | Access/Modify unauthorized data | Ownership Verification Logic | ✅ |
+| **Feedback** | `POST /feedback` | XSS / SSTI | CSP + Jinja2 Autoescape | ✅ |
+| **Network** | HTTP Response | Intercept Session / Clickjack | HSTS + XFO + CSP + Secure Flag | ✅ |
+
+---
+
+### 2.8 Post-Remediation Threat Model Update
+
+The threat model was updated iteratively throughout the development process. Following the implementation of security fixes (Weeks 3-4), the following changes were made to the risk profile:
+1. **Threat Elimination**: Threats T-01, T-02, and T-03 were downgraded from "Active" to "Mitigated" following verification of parameterized queries, persistent secret keys, and robust RBAC decorators.
+2. **Residual Risk Management**: While XSS (T-05) is mitigated by autoescaping, a Content Security Policy (CSP) was added to provide secondary browser-level defense.
+3. **Verification**: Each mitigation was verified using the automated pipeline (Semgrep for T-01, OWASP ZAP for T-08, and Pytest for T-03).
 
 ---
 
