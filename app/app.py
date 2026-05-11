@@ -26,6 +26,8 @@ from flask import (
     url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -43,6 +45,12 @@ app.config.update(
     SECRET_KEY=SECRET_KEY,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://",
 )
 
 
@@ -69,10 +77,19 @@ def init_db():
 
 
 def seed_users(db):
+    admin_pw = os.environ.get("ADMIN_PASSWORD", secrets.token_hex(8))
+    member_pw = os.environ.get("MEMBER_PASSWORD", secrets.token_hex(8))
+    viewer_pw = os.environ.get("VIEWER_PASSWORD", secrets.token_hex(8))
+    
+    if "ADMIN_PASSWORD" not in os.environ:
+        print(f"[*] Generated random admin password: {admin_pw}")
+        print(f"[*] Generated random member password: {member_pw}")
+        print(f"[*] Generated random viewer password: {viewer_pw}")
+
     users = [
-        ("admin", "admin@nexus.local", "Admin1234", "admin"),
-        ("member", "member@nexus.local", "Member1234", "member"),
-        ("viewer", "viewer@nexus.local", "Viewer1234", "viewer"),
+        ("admin", "admin@nexus.local", admin_pw, "admin"),
+        ("member", "member@nexus.local", member_pw, "member"),
+        ("viewer", "viewer@nexus.local", viewer_pw, "viewer"),
     ]
     for username, email, password, role in users:
         exists = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -266,6 +283,7 @@ def index():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
 def register():
     if g.user:
         return redirect(url_for("dashboard"))
@@ -286,19 +304,21 @@ def register():
         if password != confirm_password:
             errors.append("Passwords do not match.")
 
+        if errors:
+            for error in errors:
+                flash(error, "danger")
+            return render_template("register.html", username=username, email=email)
+
         db = get_db()
         duplicate = db.execute(
             "SELECT id FROM users WHERE username = ? OR email = ?",
             (username, email),
         ).fetchone()
+        
         if duplicate:
-            errors.append("That username or email is already registered.")
-
-        if errors:
             db.close()
-            for error in errors:
-                flash(error, "danger")
-            return render_template("register.html", username=username, email=email)
+            flash("Account created. You can now log in.", "success")
+            return redirect(url_for("login"))
 
         db.execute(
             """
@@ -316,6 +336,7 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
 def login():
     if g.user:
         return redirect(url_for("dashboard"))
