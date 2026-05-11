@@ -349,6 +349,7 @@ Push / PR
 | VUL-10 | No Rate Limiting on `/login` and `/register` | A07:2021 Auth Failures | 7.5 | 🟠 High | Manual | Fixed |
 | VUL-11 | Unauthenticated to Admin Escalation Chain | A07:2021 + A01:2021 | 9.3 | 🔴 Critical | Manual | Fixed |
 | VUL-12 | Missing HTTP Security Headers | A05:2021 Security Misconfiguration | 6.1 | 🟡 Medium | DAST, Manual | Fixed |
+| VUL-13 | Username Enumeration via Registration | A07:2021 Auth Failures | 5.3 | 🟡 Medium | Manual | Fixed |
 
 ---
 
@@ -758,6 +759,38 @@ Without `X-Frame-Options`, this renders the admin panel invisibly over an entici
 
 **Remediation Applied:**
 Added an `@app.after_request` hook in `app.py` to set `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, and `Referrer-Policy` strict headers on every response.
+
+---
+
+#### VUL-13 — Username Enumeration via Registration
+
+**OWASP Category:** A07:2021 – Identification and Authentication Failures
+**CWE Reference:** CWE-204 (Observable Response Discrepancy)
+**CVSSv3 Score:** 5.3 (Medium)
+**CVSSv3 Vector:** `AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N`
+**Detection Method:** Manual
+
+**Description:**
+The registration route previously checked for duplicate usernames and emails in a single query, returning the same error message regardless of which field caused the collision. By submitting a known-target username with a unique throwaway email, an attacker could observe if the error fired to confirm the username existed. This allowed silent enumeration of all registered usernames, feeding directly into targeted brute-force attacks (VULN-001) against accounts like `admin`.
+
+**Affected Component:** `app/app.py` — `register()` route, `/register` POST
+
+**Proof of Concept:**
+```bash
+# Test if 'admin' exists — use unique email that cannot be registered
+curl -s -X POST http://localhost:5000/register \
+  -d "username=admin&email=unique123@attacker.com&password=Pass1234&confirm_password=Pass1234" \
+  | grep -o "already registered"
+# → "already registered" means username=admin exists
+```
+
+**Impact:**
+- Confidentiality: Low — confirms which usernames are registered
+- Integrity: None
+- Availability: None
+
+**Remediation Applied:**
+Modified the `/register` logic to eliminate the boolean oracle. If a duplicate username or email is detected, the application now acts exactly as if the account was successfully created, returning the generic "Account created. You can now log in." success message and redirecting the user to the login page. This completely removes the observable discrepancy.
 
 ---
 
