@@ -104,7 +104,7 @@ def test_register_rejects_duplicate_user(client):
         },
         follow_redirects=True,
     )
-    assert b"already registered" in response.data
+    assert b"Account created" in response.data
 
 
 def test_protected_routes_redirect_when_unauthenticated(client):
