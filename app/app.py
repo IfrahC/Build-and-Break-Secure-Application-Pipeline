@@ -55,6 +55,20 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none';"
+    )
+    return response
+
 
 def get_db():
     conn = sqlite3.connect(DATABASE)

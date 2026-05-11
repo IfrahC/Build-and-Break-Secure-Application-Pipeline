@@ -348,6 +348,7 @@ Push / PR
 | VUL-09 | Missing `HttpOnly` / `Secure` Flags on Session Cookie | A05:2021 Security Misconfiguration | 5.4 | 🟡 Medium | DAST | Fixed |
 | VUL-10 | No Rate Limiting on `/login` and `/register` | A07:2021 Auth Failures | 7.5 | 🟠 High | Manual | Fixed |
 | VUL-11 | Unauthenticated to Admin Escalation Chain | A07:2021 + A01:2021 | 9.3 | 🔴 Critical | Manual | Fixed |
+| VUL-12 | Missing HTTP Security Headers | A05:2021 Security Misconfiguration | 6.1 | 🟡 Medium | DAST, Manual | Fixed |
 
 ---
 
@@ -687,6 +688,42 @@ This chain was completely broken by fixing the constituent vulnerabilities:
 1. **VULN-001** — Implemented `Flask-Limiter` to rate limit `/login` and `/register`.
 2. **VULN-007** — Removed hardcoded credentials from `app.py` and sourced them from environment variables via Docker.
 3. **VULN-005** — Modified `/register` to return a generic success message instead of a duplicate user error.
+
+---
+
+#### VUL-12 — Missing HTTP Security Headers
+
+**OWASP Category:** A05:2021 – Security Misconfiguration
+**CWE Reference:** CWE-1021 (Improper Restriction of Rendered UI Layers or Frames)
+**CVSSv3 Score:** 6.1 (Medium)
+**CVSSv3 Vector:** `AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N`
+**Detection Method:** DAST (OWASP ZAP), Manual
+
+**Description:**
+The application sets no HTTP security response headers. Four headers are absent:
+- `X-Frame-Options`: The app can be embedded in a cross-origin `<iframe>`. An attacker hosts a transparent overlay luring an admin to click "Save" on a role-change form, unknowingly promoting the attacker's account (clickjacking).
+- `Content-Security-Policy`: No script source restrictions. If XSS is introduced in the future, there are no browser-enforced mitigations.
+- `X-Content-Type-Options`: Browsers may MIME-sniff response content, enabling content injection.
+- `Referrer-Policy`: Internal paths leak to third-party origins via the Referer header when clicking external links.
+
+**Affected Component:** `app/app.py` — no `@app.after_request` hook; all routes
+
+**Proof of Concept:**
+*Clickjacking PoC:*
+```html
+<!-- attacker.html — hosted on attacker.com -->
+<iframe src="http://localhost:5000/admin" style="opacity:0; position:absolute; top:0; left:0; width:100%; height:100%;"></iframe>
+<button style="position:absolute; top:200px; left:300px;">Click to claim prize</button>
+```
+Without `X-Frame-Options`, this renders the admin panel invisibly over an enticing button.
+
+**Impact:**
+- Confidentiality: Low — referrer leaks internal paths
+- Integrity: Low-Medium — clickjacking could trigger admin actions
+- Availability: None
+
+**Remediation Applied:**
+Added an `@app.after_request` hook in `app.py` to set `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, and `Referrer-Policy` strict headers on every response.
 
 ---
 
