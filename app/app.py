@@ -801,4 +801,9 @@ def admin():
 if __name__ == "__main__":
     init_db()
     host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
-    app.run(host=host, port=5000, debug=os.environ.get("FLASK_DEBUG") == "1")
+    cert_path = os.path.join(BASE_DIR, "database", "cert.pem")
+    key_path = os.path.join(BASE_DIR, "database", "key.pem")
+    ssl_context = None
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+    app.run(host=host, port=5000, debug=os.environ.get("FLASK_DEBUG") == "1", ssl_context=ssl_context)

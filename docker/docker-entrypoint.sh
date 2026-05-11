@@ -19,5 +19,14 @@ else
   echo "[entrypoint] Database already exists, skipping init."
 fi
 
+CERT_PATH="/app/database/cert.pem"
+KEY_PATH="/app/database/key.pem"
+
+if [ ! -f "$CERT_PATH" ]; then
+  echo "[entrypoint] Generating self-signed certificate for nexus.local..."
+  openssl req -x509 -newkey rsa:4096 -nodes -out "$CERT_PATH" -keyout "$KEY_PATH" -days 365 -subj "/CN=nexus.local"
+  echo "[entrypoint] Certificate generated."
+fi
+
 echo "[entrypoint] Starting Flask application..."
 exec python app.py
