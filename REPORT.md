@@ -51,23 +51,23 @@
 
 ### Project Overview
 
-**Group 1** developed **NexusPortal**, a project and task management web application built with Python 3.11, Flask 3.1, Supabase (PostgreSQL), and Jinja2 templates. The application implements a four-tier Role-Based Access Control (RBAC) system with Admin, Member, Viewer, and Unauthenticated roles. It was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a complete CI/CD security pipeline incorporating SAST (Bandit + Semgrep + TruffleHog), SCA (pip-audit + Safety), and DAST (OWASP ZAP).
+**Group 6** developed **NexusPortal**, a project and task management web application built with Python 3.11, Flask 3.1, Supabase (PostgreSQL), and Jinja2 templates. The application implements a four-tier Role-Based Access Control (RBAC) system with Admin, Member, Viewer, and Unauthenticated roles. It was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a CI/CD security pipeline incorporating SAST (Bandit + Semgrep + TruffleHog), SCA (pip-audit + Safety), DAST (OWASP ZAP), and coverage reporting.
 
 ### Key Findings at a Glance
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| 🔴 Critical | [N] | [Resolved / Open] |
-| 🟠 High | [N] | [Resolved / Open] |
-| 🟡 Medium | [N] | [Resolved / Open] |
-| 🔵 Low | [N] | [Resolved / Open] |
-| ℹ️ Informational | [N] | [Resolved / Open] |
+| Critical | 3 | 3 fixed / 0 open |
+| High | 6 | 6 fixed / 0 open |
+| Medium | 5 | 4 fixed / 1 accepted residual |
+| Low | 0 | 0 open |
+| Informational | 0 | 0 open |
 
 ### Business Impact Summary
 
-During the assessment, 10 vulnerabilities were identified through a combination of automated tooling (SAST, DAST, SCA) and manual penetration testing. The most critical finding, **SQL Injection in the login form**, allowed an unauthenticated attacker to bypass authentication and gain admin access in seconds. A second critical finding, **Broken Access Control on all admin routes**, allowed any registered user — regardless of role — to access and modify the full user list and promote themselves to admin. Most alarmingly, a **hardcoded Flask `SECRET_KEY`** enabled complete session cookie forgery, meaning the entire RBAC system could be bypassed by any user who simply inspected their own cookie. A **Server-Side Template Injection (SSTI)** vulnerability in the admin feedback view allowed Member-role users to achieve remote code execution on the server.
+During the assessment, 14 vulnerabilities were documented through automated tooling (SAST, DAST, SCA) and manual penetration testing. The most critical finding, **SQL Injection in the login form**, allowed an unauthenticated attacker to bypass authentication and gain admin access in seconds. A second critical finding, **Broken Access Control on all admin routes**, allowed any registered user regardless of role to access and modify the full user list and promote themselves to admin. Most alarmingly, a **hardcoded Flask `SECRET_KEY`** enabled complete session cookie forgery, meaning the entire RBAC system could be bypassed by any user who inspected or recovered the signing key. A **Server-Side Template Injection (SSTI)** vulnerability in the admin feedback view allowed Member-role users to achieve remote code execution on the server.
 
-All critical and high-severity findings have been remediated and verified through re-testing. The application pipeline now enforces quality gates that block merges on detection of high-severity SAST or DAST findings.
+All critical and high-severity findings have been remediated and verified through re-testing. One medium-severity finding, username enumeration on duplicate registration, is retained as an accepted residual risk because the application deliberately shows duplicate-account feedback for user experience. The GitHub Actions pipeline currently runs SAST, SCA, DAST, and coverage checks and uploads scan artifacts for review; security findings are handled through the report and GitHub Issue workflow rather than automatic merge blocking.
 
 ### Recommendations
 
@@ -176,7 +176,7 @@ The STRIDE methodology was applied to each major component of the NexusPortal ar
 | T-06 | Logs | Information Disclosure | Flask `DEBUG=True` exposes env vars on error pages | Medium | `DEBUG=False` enforced in production | Mitigated |
 | T-07 | Packages | Denial of Service | Vulnerable dependencies (Werkzeug/Flask) | Medium | `pip-audit` enforced in CI/CD pipeline | Mitigated |
 | T-08 | Interface | Elevation of Privilege | Clickjacking via transparent overlay on project delete | Medium | `X-Frame-Options: DENY` header implemented | Mitigated |
-| T-09 | Auth | Spoofing | Username enumeration via registration error discrepancy | Medium | Generic success messages for all attempts | Mitigated |
+| T-09 | Auth | Spoofing | Username enumeration via registration error discrepancy | Medium | Rate limiting, strong password rules, and documented residual risk | Accepted residual |
 | T-10 | Network | Information Disclosure | Session cookie transmitted over plain HTTP | Medium | `SESSION_COOKIE_SECURE=True` enforced | Mitigated |
 
 ---
@@ -193,7 +193,7 @@ The DREAD model provides a quantitative risk assessment to prioritize remediatio
 | **T-04** | IDOR (Project Ownership) | 7 | 8 | 9 | 7 | 8 | **39** | 🟠 High |
 | **T-05** | Stored XSS | 8 | 7 | 8 | 8 | 7 | **38** | 🟠 High |
 | **T-10** | Cleartext Session Cookies | 9 | 7 | 6 | 10 | 6 | **38** | 🟠 High |
-| **T-09** | Username Enumeration | 4 | 10 | 10 | 10 | 9 | **43** | 🟠 High |
+| **T-09** | Username Enumeration | 2 | 8 | 7 | 8 | 1 | **26** | 🟡 Medium |
 | **T-08** | Clickjacking | 6 | 8 | 8 | 8 | 7 | **37** | 🟡 Medium |
 | **T-07** | Vulnerable Dependencies | 5 | 5 | 5 | 4 | 6 | **25** | 🟡 Medium |
 
@@ -202,7 +202,7 @@ The DREAD model provides a quantitative risk assessment to prioritize remediatio
 | Impact \ Likelihood | Low | Medium | High |
 |:---:|:---:|:---:|:---:|
 | **High** | T-07 | T-06, T-08 | **T-01, T-02, T-03** |
-| **Medium** | - | T-05, T-10 | **T-04, T-09** |
+| **Medium** | - | T-05, T-09, T-10 | **T-04** |
 | **Low** | - | - | - |
 
 ---
@@ -317,16 +317,18 @@ Push / PR to main
 
 ---
 
-### 3.5 Pipeline Quality Gates
+### 3.5 Pipeline Review Gates
 
-| Gate | Condition | Action on Failure |
+The repository uses the CI/CD pipeline as an evidence-producing security review stage. The scan jobs are intentionally configured to complete and upload artifacts even when findings are present, so the team can include raw evidence in the exploitation and remediation reports. Merge decisions are made through GitHub Issues, manual review, and retest evidence.
+
+| Review Area | Current Automation | How Findings Are Handled |
 |------|-----------|-------------------|
-| SAST Critical/High | Any finding → fail | Block PR merge |
-| SCA Critical | CVSSv3 ≥ 9.0 | Block PR merge |
-| DAST High | Any high alert → fail | Block PR merge |
-| Re-test Gate | Remediation branch must pass all gates | Required before merge to main |
+| SAST | Bandit, Semgrep, and TruffleHog run in GitHub Actions and upload artifacts | Findings are triaged into vulnerability/remediation issues |
+| SCA | pip-audit and Safety run on push, PR, and weekly schedule | Vulnerable packages are remediated and retested before final submission |
+| DAST | OWASP ZAP baseline scans the Dockerized HTTPS app | Alerts are documented, reproduced manually where relevant, and retested |
+| Coverage | pytest + coverage.py runs on push and PR | Test failures fail the workflow; coverage artifacts support remediation evidence |
 
-> *Screenshot of passing pipeline run: [Insert screenshot here]*
+Current retest evidence from the local audit: `python -m pytest tests -q` passed 25 tests, coverage reported 83%, Bandit found 0 issues, Semgrep found 0 findings, pip-audit found no known vulnerabilities, Safety found 0 vulnerabilities, and the Docker HTTPS smoke test reached the application and authenticated successfully.
 
 ---
 
@@ -348,7 +350,7 @@ Push / PR to main
 | VUL-10 | No Rate Limiting on `/login` and `/register` | A07:2021 Auth Failures | 7.5 | 🟠 High | Manual | Fixed |
 | VUL-11 | Unauthenticated to Admin Escalation Chain | A07:2021 + A01:2021 | 9.3 | 🔴 Critical | Manual | Fixed |
 | VUL-12 | Missing HTTP Security Headers | A05:2021 Security Misconfiguration | 6.1 | 🟡 Medium | DAST, Manual | Fixed |
-| VUL-13 | Username Enumeration via Registration | A07:2021 Auth Failures | 5.3 | 🟡 Medium | Manual | Fixed |
+| VUL-13 | Username Enumeration via Registration | A07:2021 Auth Failures | 5.3 | 🟡 Medium | Manual | Accepted residual |
 | VUL-14 | Role Disclosure in Assignee Dropdown | A01:2021 Broken Access Control | 4.3 | 🟡 Medium | Manual | Fixed |
 
 ---
@@ -401,7 +403,7 @@ Location: /dashboard
 Set-Cookie: session=<admin-session-cookie>; Path=/
 ```
 
-*Screenshot:* [Insert Burp Suite screenshot of successful bypass + admin dashboard redirect]
+**Evidence Reference:** Pre-fix request/response evidence is shown above. The post-fix re-test screenshot for the same payload is stored at `docs/images/vul01_sqli_blocked.png`, showing the payload rejected with the invalid-credentials message.
 
 **Impact:**
 - Confidentiality: High — full `users` table exposed including password hashes, emails, and roles
@@ -573,7 +575,7 @@ Cookie: session=<member-a-session>
 ```
 Response: `HTTP 200` — Project deleted successfully.
 
-*Screenshot:* [Insert screenshot of Member A deleting Member B's project]
+**Evidence Reference:** Pre-fix request/response evidence is shown above. The current regression suite covers the fixed ownership path with `test_member_cannot_view_other_member_project`, and manual retest confirms non-owning Members are redirected rather than shown the target project.
 
 **Impact:**
 - Confidentiality: High — any Member can read any other Member's project details and task contents
@@ -962,7 +964,7 @@ curl -b attacker.txt http://localhost:5000/admin
 This chain was completely broken by fixing the constituent vulnerabilities:
 1. **VULN-001** — Implemented `Flask-Limiter` to rate limit `/login` and `/register`.
 2. **VULN-007** — Removed hardcoded credentials from `app.py` and sourced them from environment variables via Docker.
-3. **VULN-005** — Modified `/register` to return a generic success message instead of a duplicate user error.
+3. **VULN-005** — The duplicate-registration oracle remains as an accepted medium residual risk, but the chain is no longer practical because rate limiting, stronger password policy, hashed passwords, CSRF, and server-side RBAC block the escalation path.
 
 ---
 
@@ -1035,8 +1037,8 @@ curl -s -X POST http://localhost:5000/register \
 - Integrity: None
 - Availability: None
 
-**Remediation Applied:**
-Modified the `/register` logic to eliminate the boolean oracle. If a duplicate username or email is detected, the application now acts exactly as if the account was successfully created, returning the generic "Account created. You can now log in." success message and redirecting the user to the login page. This completely removes the observable discrepancy.
+**Residual Risk Decision:**
+The application intentionally keeps the duplicate-registration message (`"Username or email is already registered."`) so legitimate users get clear feedback when they try to reuse an existing account. This means the username/email enumeration oracle is not eliminated. The risk is accepted as medium residual risk and is reduced by rate limiting on `/register`, stronger password rules, hashed password storage, CSRF protection, and server-side RBAC. For a production deployment, the recommended improvement is to move to a generic registration response plus email verification.
 
 ---
 
@@ -1102,7 +1104,7 @@ curl -k -c cookies.txt -X POST https://localhost/login \
 
 **Business Impact:** Complete authentication bypass. The attacker gains administrative access to all user accounts and all project/task data in the application.
 
-*Screenshot: [Insert Burp Suite screenshot of admin dashboard access via injected session]*
+**Evidence Reference:** Pre-fix request/response evidence is documented above. Current post-fix evidence is stored at `docs/images/vul01_sqli_blocked.png`, where the same login bypass payload is rejected.
 
 ---
 
@@ -1129,7 +1131,7 @@ curl -k -c cookies.txt -X POST https://localhost/login \
 
 **Outcome:** Admin access granted from a Viewer account. All three privileged role bypass (Viewer → Admin, Member → Admin) confirmed.
 
-*Screenshot: [Insert screenshot of forged cookie + admin panel access]*
+**Evidence Reference:** Pre-fix session forgery steps are documented above. Current retest evidence is the production startup requirement for `FLASK_SECRET_KEY` plus the secure session cookie flags verified in the Docker HTTPS smoke test.
 
 ---
 
@@ -1165,7 +1167,7 @@ curl -k -c cookies.txt -X POST https://localhost/login \
 
 **Business Impact:** An attacker with a standard Member account gains permanent administrative access. They can: demote legitimate admins (locking them out), read all user data and submitted security feedback, delete all projects and tasks, and change any user's password or role. All 3 user accounts and all project/task data are immediately compromised.
 
-*Screenshot: [Insert screenshot of Member-session accessing `/admin` + successful role escalation response]*
+**Evidence Reference:** Pre-fix escalation steps are documented above. Current post-fix evidence is stored at `docs/images/vul03_admin_denied.png`, showing non-admin access to `/admin` denied.
 
 ---
 
@@ -1198,7 +1200,7 @@ curl -k -c cookies.txt -X POST https://localhost/login \
 - Terminate the container process, causing denial of service
 - Establish a reverse shell for persistent access
 
-*Screenshot: [Insert screenshot of RCE output (`uid=0(root)`) rendered in admin feedback page]*
+**Evidence Reference:** Pre-fix SSTI/RCE steps are documented above. Current retest submits template syntax as feedback and verifies it renders as literal text, not evaluated server-side.
 
 ---
 
@@ -1208,20 +1210,20 @@ curl -k -c cookies.txt -X POST https://localhost/login \
 
 | ID | Vulnerability | Fix Applied | Commit | Re-Test Result |
 |----|-------------|-------------|--------|----------------|
-| VUL-01 | SQL Injection – Login | Replaced f-string query with parameterized `db.execute(query, params)` + `check_password_hash` | [commit hash] | ✅ Pass |
-| VUL-02 | Insecure `SECRET_KEY` Default | Persistent `FLASK_SECRET_KEY` loaded from `.env` via `env_file` in `docker-compose.yml`; startup `RuntimeError` if unset in production | [commit hash] | ✅ Pass |
-| VUL-03 | Broken Access Control – Admin Routes | Added `@roles_required("admin")` decorator to `/admin` route; non-admin users redirected with flash | [commit hash] | ✅ Pass |
-| VUL-04 | IDOR – Project/Task Ownership | Added `can_manage_project()` helper checking `project["owner_id"] == g.user["id"]` on all mutation routes | [commit hash] | ✅ Pass |
-| VUL-05 | Stored XSS | Jinja2 autoescape enabled by default; `\| safe` filters removed from user-supplied fields; CSP header added via `@app.after_request` | [commit hash] | ✅ Pass |
-| VUL-06 | SSTI via `render_template_string()` | Removed `render_template_string()`; replaced with `render_template("feedback.html", feedbacks=rows)` | [commit hash] | ✅ Pass |
-| VUL-07 | Vulnerable Dependencies | Updated `Flask` to 3.1.3, `Werkzeug` to 3.1.6, `Jinja2` to 3.1.6 in `requirements.txt` | [commit hash] | ✅ Pass |
-| VUL-08 | `DEBUG=True` in Production | Set `FLASK_DEBUG=0` and `FLASK_ENV=production` in `docker-compose.yml`; generic 500 error handler added | [commit hash] | ✅ Pass |
-| VUL-09 | Insecure Session Cookie | Set `SESSION_COOKIE_SECURE=True`, `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SAMESITE="Lax"` in `app.config` | [commit hash] | ✅ Pass |
-| VUL-10 | No Rate Limiting | Added `Flask-Limiter` with `@limiter.limit("5 per minute; 20 per hour")` on `POST /login` and `POST /register` | [commit hash] | ✅ Pass |
-| VUL-11 | Unauthenticated → Admin Chain | Chain broken by fixing VUL-10 (rate limiting), VUL-03 (RBAC), and removing hardcoded demo credentials from source | [commit hash] | ✅ Pass |
-| VUL-12 | Missing HTTP Security Headers | Added `@app.after_request` hook setting `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy` | [commit hash] | ✅ Pass |
-| VUL-13 | Username Enumeration via Registration | Modified `/register` to return identical success response regardless of duplicate username/email | [commit hash] | ✅ Pass |
-| VUL-14 | Role Disclosure in Assignee Dropdown | Removed `role` field from `project_detail()` SQL query; updated template to show `id` and `username` only | [commit hash] | ✅ Pass |
+| VUL-01 | SQL Injection – Login | Replaced f-string query with parameterized `db.execute(query, params)` + `check_password_hash` | `ac7c410` | Pass |
+| VUL-02 | Insecure `SECRET_KEY` Default | Persistent `FLASK_SECRET_KEY` loaded from `.env` via `env_file` in `docker-compose.yml`; startup `RuntimeError` if unset in production | `c929ab0` | Pass |
+| VUL-03 | Broken Access Control – Admin Routes | Added `@roles_required("admin")` to `/admin`; non-admin users redirected with flash | `ac7c410` | Pass |
+| VUL-04 | IDOR – Project/Task Ownership | Added `can_manage_project()` and task-owner checks on all project/task mutation routes | `ac7c410` | Pass |
+| VUL-05 | Stored XSS | Kept Jinja autoescape, avoided unsafe rendering of user content, and added CSP headers | `e437485` | Pass |
+| VUL-06 | SSTI via `render_template_string()` | User feedback is rendered through static templates and escaped as data, not evaluated as a template | `ac7c410` | Pass |
+| VUL-07 | Vulnerable Dependencies | Current pinned dependencies scan clean with pip-audit and Safety | `13f7616` | Pass |
+| VUL-08 | `DEBUG=True` in Production | Docker runtime sets production environment and `FLASK_DEBUG=0` | `13f7616` | Pass |
+| VUL-09 | Insecure Session Cookie | Set `SESSION_COOKIE_SECURE=True`, `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SAMESITE="Lax"` | `0173900` | Pass |
+| VUL-10 | No Rate Limiting | Added Flask-Limiter to `/login` and `/register` POST paths | `354bca7` | Pass |
+| VUL-11 | Unauthenticated → Admin Chain | Chain broken by rate limiting, RBAC enforcement, secure sessions, and stronger registration controls | `604049b` | Pass |
+| VUL-12 | Missing HTTP Security Headers | Added `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, and `Referrer-Policy` | `e437485` | Pass |
+| VUL-13 | Username Enumeration via Registration | Duplicate username/email submissions still return a duplicate-account warning for usability; risk is documented and accepted with compensating controls | Accepted residual | Accepted |
+| VUL-14 | Role Disclosure in Assignee Dropdown | Removed role data from the assignee query/template and added a regression test | `8ceebfc`, `58bd3c4` | Pass |
 
 ---
 
@@ -1266,7 +1268,7 @@ def test_sql_injection_login(client):
 - Same Burp Suite SQL injection payload attempted post-fix.
 - Response: `HTTP 401` — `Invalid credentials`.
 - Bandit re-scan: zero SQL injection alerts.
-- Pipeline: ✅ Passes all quality gates.
+- Pipeline: Passes the current retest checks; scan workflows upload artifacts for review rather than enforcing automatic merge-blocking gates.
 
 *Screenshot (post-fix — re-test):* SQLi payload `admin'OR'1'='1'--` submitted. Server returns `Invalid username/email or password.` — no admin session granted:
 
@@ -1361,7 +1363,16 @@ The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape
 
 ---
 
-> *[Apply same template for VUL-04, VUL-05, VUL-07–VUL-10]*
+### 6.3 Additional Control Re-Tests
+
+| Control | Re-Test Evidence | Result |
+|---|---|---|
+| Project ownership checks | `test_member_cannot_view_other_member_project` verifies Members cannot view another owner's project | Pass |
+| Viewer read-only behavior | `test_viewer_has_read_only_project_access` verifies Viewer cannot create projects | Pass |
+| Last admin guard | `test_admin_cannot_demote_only_admin` verifies the final admin cannot be downgraded | Pass |
+| Assignee role disclosure | `test_project_task_assignee_dropdown_does_not_disclose_roles` verifies role labels are not exposed | Pass |
+| Security headers | Docker HTTPS smoke test returned CSP, XFO, nosniff, and referrer-policy headers | Pass |
+| Dependency posture | `pip-audit -r app/requirements.txt` and `safety check -r app/requirements.txt` found no known vulnerabilities | Pass |
 
 ---
 
@@ -1371,13 +1382,13 @@ The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape
 
 | Annex | Contents |
 |-------|---------|
-| **Annex A** | Full SAST tool output (CodeQL / Semgrep raw results) |
-| **Annex B** | OWASP ZAP DAST HTML Report — pre-fix |
-| **Annex C** | SCA Report — npm audit / Dependency-Check output |
-| **Annex D** | OWASP ZAP DAST HTML Report — post-fix (re-test) |
-| **Annex E** | GitHub Actions pipeline run screenshots (pre-fix fail + post-fix pass) |
-| **Annex F** | Burp Suite HTTP request/response evidence for all exploits |
-| **Annex G** | CONTRIBUTIONS.md — team contribution breakdown |
+| **Annex A** | SAST tool output from Bandit, Semgrep, and TruffleHog GitHub Actions artifacts |
+| **Annex B** | OWASP ZAP DAST baseline report from the DAST workflow artifact |
+| **Annex C** | SCA tool output from pip-audit and Safety workflow artifacts |
+| **Annex D** | Post-fix re-test screenshots in `docs/images/` |
+| **Annex E** | GitHub Actions workflow evidence for SAST, SCA, DAST, and coverage |
+| **Annex F** | Manual request/response evidence embedded in the exploitation sections |
+| **Annex G** | `CONTRIBUTIONS.md` team contribution breakdown and issue traceability |
 
 ---
 
@@ -1387,13 +1398,13 @@ The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape
 
 | Member | Role | Key Contributions | Commits |
 |--------|------|------------------|---------|
-| [Member 1] | App Developer | Designed and built core CRUD features, RBAC implementation, Docker setup | [N] commits |
-| [Member 2] | Security Engineer | Configured CI/CD pipeline (SAST/DAST/SCA), wrote pipeline quality gates, managed GitHub Issues | [N] commits |
-| [Member 3] | Pentester / Report | Performed manual pentesting, wrote exploitation report, led remediation, authored final report | [N] commits |
+| Bilal Ahmed | App Developer / Report Lead | Built and tested Flask RBAC, CRUD, sessions, validation, Docker fixes, and report cleanup | Issue-linked commits in git history |
+| Ifrah Chishti | Security Engineer / Pipeline | Maintained repository delivery, GitHub Actions security scans, and pipeline/report coordination | Workflow and repository artifacts |
+| Sabahatullah Shaikh | Pentester / Remediation | Documented threat model, exploitation evidence, remediation evidence, and retest proof | Findings and report sections |
 
 > *Individual contributions are documented in `CONTRIBUTIONS.md` in the repository root. Each member's commit messages follow the `fix #N: description` format as per course guidelines.*
 
-**GitHub Contribution Graph:** [Insert screenshot]
+**GitHub Contribution Evidence:** See `CONTRIBUTIONS.md`, GitHub Issues, and `git log --oneline --grep="Fixes\|Refs"` for issue-linked commits.
 
 ---
 
@@ -1401,5 +1412,5 @@ The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape
 
 ---
 
-> **Prepared by:** Group 1
-> **GitHub Repository:** [[URL](https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline)] | **Deployment URL:** `https://[hostname]`
+> **Prepared by:** Group 6
+> **GitHub Repository:** [Build-and-Break-Secure-Application-Pipeline](https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline) | **Demo URL:** `https://localhost:5000` when run with Docker Compose
