@@ -145,7 +145,8 @@ def test_protected_routes_redirect_when_unauthenticated(client):
     for path in ["/dashboard", "/projects", "/feedback", "/admin"]:
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 302
-        assert "/login" in response.headers["Location"]
+        assert response.headers["Location"] == "/login"
+        assert "next=" not in response.headers["Location"]
 
 
 def test_member_project_crud(client):

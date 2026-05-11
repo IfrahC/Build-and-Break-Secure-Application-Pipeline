@@ -247,7 +247,7 @@ def login_required(view):
     def wrapped_view(*args, **kwargs):
         if g.user is None:
             flash("Please log in first.", "warning")
-            return redirect(url_for("login", next=request.path))
+            return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -259,7 +259,7 @@ def roles_required(*allowed_roles):
         def wrapped_view(*args, **kwargs):
             if g.user is None:
                 flash("Please log in first.", "warning")
-                return redirect(url_for("login", next=request.path))
+                return redirect(url_for("login"))
             if g.user["role"] not in allowed_roles:
                 flash("You do not have permission to access that page.", "danger")
                 return redirect(url_for("dashboard"))
