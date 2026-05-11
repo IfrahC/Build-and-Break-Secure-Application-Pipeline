@@ -6,13 +6,13 @@
   --line: #d7dde5;
   --line-strong: #b9c2cf;
   --surface: #ffffff;
-  --surface-soft: #f3f6f8;
-  --surface-panel: #0d1218;
-  --surface-panel-soft: #141b23;
-  --accent: #008f7a;
-  --accent-dark: #006b5d;
+  --surface-soft: #eef2f6;
+  --surface-panel: #f8fafc;
+  --surface-panel-soft: #f3f6fa;
+  --accent: #275dd8;
+  --accent-dark: #1d47ad;
   --blue: #275dd8;
-  --amber: #ad741b;
+  --amber: #a76612;
   --red: #b42318;
   --green: #237a43;
   --focus: #7cc7ff;
@@ -74,9 +74,9 @@ textarea:focus-visible {
 }
 
 .topbar {
-  background: var(--surface-panel);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 18px rgba(17, 20, 24, 0.06);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -103,13 +103,13 @@ textarea:focus-visible {
 }
 
 .brand {
-  color: #f7fbff;
+  color: var(--ink);
   gap: 12px;
   min-width: max-content;
 }
 
 .brand:hover {
-  color: #ffffff;
+  color: var(--accent-dark);
 }
 
 .brand-mark {
@@ -138,7 +138,7 @@ textarea:focus-visible {
 }
 
 .brand-subtitle {
-  color: #95a1af;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   margin-top: 4px;
@@ -152,7 +152,7 @@ textarea:focus-visible {
 
 .nav-links {
   background: var(--surface-panel-soft);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   gap: 4px;
   padding: 4px;
@@ -160,7 +160,7 @@ textarea:focus-visible {
 
 .nav-links a:not(.button) {
   border-radius: 6px;
-  color: #cad3dd;
+  color: var(--muted-strong);
   font-size: 14px;
   font-weight: 750;
   padding: 8px 11px;
@@ -168,8 +168,8 @@ textarea:focus-visible {
 
 .nav-links a:not(.button):hover,
 .nav-links a.active:not(.button) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: #e7eefc;
+  color: var(--accent-dark);
 }
 
 .public-links {
@@ -197,16 +197,16 @@ textarea:focus-visible {
 
 .user-chip {
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #eef4f8;
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--ink);
   gap: 9px;
   padding: 5px 10px 5px 5px;
 }
 
 .user-avatar {
   align-items: center;
-  background: #27323d;
+  background: var(--accent);
   border-radius: 999px;
   color: #ffffff;
   display: inline-flex;
@@ -227,7 +227,7 @@ textarea:focus-visible {
 }
 
 .user-role {
-  color: #98a5b3;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 750;
 }
@@ -255,9 +255,9 @@ textarea:focus-visible {
 }
 
 .status.live {
-  background: rgba(0, 143, 122, 0.14);
-  border-color: rgba(0, 143, 122, 0.45);
-  color: #dbfff7;
+  background: #e8f7ec;
+  border-color: #b9e3c6;
+  color: var(--green);
 }
 
 .page {
@@ -281,11 +281,11 @@ textarea:focus-visible {
 
 .landing-hero {
   align-items: center;
-  background: var(--surface-panel);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  color: #f7fbff;
+  color: var(--ink);
   min-height: 460px;
   overflow: hidden;
   padding: 52px;
@@ -294,8 +294,8 @@ textarea:focus-visible {
 
 .landing-hero::after {
   background:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(39, 93, 216, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39, 93, 216, 0.055) 1px, transparent 1px);
   background-size: 34px 34px;
   content: "";
   inset: 0;
@@ -326,7 +326,7 @@ textarea:focus-visible {
 }
 
 .landing-hero .eyebrow {
-  color: #73e4cf;
+  color: var(--accent-dark);
 }
 
 .eyebrow {
@@ -339,7 +339,7 @@ textarea:focus-visible {
 }
 
 .lede {
-  color: #ccd6df;
+  color: var(--muted-strong);
   font-size: 20px;
   margin: 0 0 24px;
   max-width: 680px;
@@ -359,10 +359,10 @@ textarea:focus-visible {
 }
 
 .mission-strip span {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  color: #eaf2f8;
+  color: var(--muted-strong);
   font-size: 13px;
   font-weight: 800;
   padding: 7px 11px;
@@ -392,9 +392,9 @@ textarea:focus-visible {
 }
 
 .operations-panel {
-  background: rgba(13, 18, 24, 0.86);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
 }
 
 .panel-header,
@@ -420,7 +420,7 @@ textarea:focus-visible {
 }
 
 .panel-title {
-  color: #ffffff;
+  color: var(--ink);
   font-size: 17px;
   font-weight: 850;
 }
@@ -432,7 +432,7 @@ textarea:focus-visible {
 }
 
 .signal-list div {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--line);
   padding: 16px 0;
 }
 
@@ -441,12 +441,12 @@ textarea:focus-visible {
 }
 
 .signal-list dt {
-  color: #ffffff;
+  color: var(--ink);
   font-weight: 850;
 }
 
 .signal-list dd {
-  color: #aab6c3;
+  color: var(--muted);
   margin: 5px 0 0;
 }
 
@@ -476,14 +476,16 @@ button:hover {
 
 .button.secondary,
 button.secondary {
-  background: #27323d;
-  border-color: #27323d;
+  background: #edf3ff;
+  border-color: #c9d8ff;
+  color: var(--accent-dark);
 }
 
 .button.secondary:hover,
 button.secondary:hover {
-  background: #19222b;
-  border-color: #19222b;
+  background: #dfe9ff;
+  border-color: #aebfff;
+  color: var(--accent-dark);
 }
 
 .button.ghost,
@@ -491,16 +493,6 @@ button.ghost {
   background: transparent;
   border-color: var(--line);
   color: var(--ink);
-}
-
-.topbar .button.ghost {
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #f2f6fa;
-}
-
-.topbar .button.ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .button.ghost:hover,

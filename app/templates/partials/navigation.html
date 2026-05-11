@@ -21,7 +21,7 @@
   {% else %}
     <div class="nav-links public-links">
       <a class="{% if request.endpoint == 'login' %}active{% endif %}" href="{{ url_for('login') }}">Sign in</a>
-      <a class="button button-compact" href="{{ url_for('register') }}">Request access</a>
+      <a class="button button-compact" href="{{ url_for('register') }}">Create account</a>
     </div>
   {% endif %}
 </nav>
