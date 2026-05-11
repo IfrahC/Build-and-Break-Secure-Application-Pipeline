@@ -51,7 +51,7 @@
 
 ### Project Overview
 
-[Group X] developed **[Application Name]**, a project and task management web application built with Python 3.11, Flask 3.1, SQLite, and Jinja2 templates. The application implements a four-tier Role-Based Access Control (RBAC) system with Admin, Member, Viewer, and Unauthenticated roles. It was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a complete CI/CD security pipeline incorporating SAST (Bandit + Semgrep), SCA (pip-audit), and DAST (OWASP ZAP).
+**Group 1** developed **NexusPortal**, a project and task management web application built with Python 3.11, Flask 3.1, Supabase (PostgreSQL), and Jinja2 templates. The application implements a four-tier Role-Based Access Control (RBAC) system with Admin, Member, Viewer, and Unauthenticated roles. It was designed, built, secured, and attacked as part of a four-week DevSecOps exercise. The application is fully containerized using Docker and hosted on GitHub with a complete CI/CD security pipeline incorporating SAST (Bandit + Semgrep + TruffleHog), SCA (pip-audit + Safety), and DAST (OWASP ZAP).
 
 ### Key Findings at a Glance
 
@@ -521,7 +521,9 @@ role=admin
 ```
 Response: `HTTP 200 — role updated successfully`
 
-*Screenshot:* [Insert screenshot of admin user list accessed as Viewer + successful role escalation]
+*Screenshot (post-fix — re-test):* Viewer-role user navigates to `/admin` and is redirected to the dashboard with a permission denied flash:
+
+![VUL-03: Admin denied for Viewer](docs/images/vul03_admin_denied.png)
 
 **Impact:**
 Any registered user can view all user accounts and promote themselves to admin, resulting in complete application compromise — 3 user accounts, 2 seeded projects, and all submitted security feedback are exposed. Role escalation to admin is permanent and survives logout.
@@ -624,7 +626,9 @@ Project and task name fields were rendered in Jinja2 templates without the `|e` 
 - Integrity: Low — no direct write, but cookie replay enables admin-level mutations
 - Availability: None
 
-*Screenshot:* [Insert screenshot of XSS execution + exfiltrated cookie]
+*Screenshot (post-fix — re-test):* XSS payload stored as project title is rendered as escaped literal text — no JavaScript executes:
+
+![VUL-05: XSS payload rendered as escaped text](docs/images/vul05_xss_escaped.png)
 
 **False Positive Assessment:** Confirmed true positive — payload stored and executed in browser pre-fix. Cookie value visible in attacker-controlled server request log.
 
@@ -833,6 +837,10 @@ curl -b "session=eyJ1c2VyX2lkIjoxLCJyb2xlIjoiYWRtaW4ifQ.abc123" \
 **Remediation Applied:**
 Added `SESSION_COOKIE_SECURE=True` to the Flask `app.config.update()` block in `app.py`. This ensures browsers will only transmit the session cookie over encrypted HTTPS connections, rendering passive network sniffing ineffective.
 
+**Re-Test:** Chrome DevTools → Application → Cookies confirms all three flags set on the `session` cookie: `HttpOnly ✓`, `Secure ✓`, `SameSite: Lax`. Pipeline: ✅ Pass.
+
+![VUL-09: Session cookie with Secure, HttpOnly, SameSite=Lax flags confirmed in DevTools](docs/images/vul09_cookie_flags.png)
+
 ---
 
 #### VUL-10 — Improper Restriction of Authentication Attempts
@@ -882,6 +890,10 @@ limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 @limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def login():
 ```
+
+**Re-Test:** Scripted 9 rapid `POST /login` requests. Requests 1–8 return `HTTP 200`. Request 9 returns `HTTP 429 Too Many Requests`. Pipeline: ✅ Pass.
+
+![VUL-10: Rate limiter returns 429 after 8 attempts](docs/images/vul10_rate_limit_429.png)
 
 ---
 
@@ -988,6 +1000,10 @@ Without `X-Frame-Options`, this renders the admin panel invisibly over an entici
 
 **Remediation Applied:**
 Added an `@app.after_request` hook in `app.py` to set `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, and `Referrer-Policy` strict headers on every response.
+
+**Re-Test:** `curl -k -I https://localhost:5000/ | findstr /i "Content-Security X-Frame X-Content"` confirms all three headers present on every response. Pipeline: ✅ Pass.
+
+![VUL-12: Security headers confirmed in response — X-Frame-Options, X-Content-Type-Options, Content-Security-Policy](docs/images/vul12_security_headers.png)
 
 ---
 
@@ -1252,7 +1268,9 @@ def test_sql_injection_login(client):
 - Bandit re-scan: zero SQL injection alerts.
 - Pipeline: ✅ Passes all quality gates.
 
-*Screenshot: [Insert screenshot of failed injection attempt + pipeline pass]*
+*Screenshot (post-fix — re-test):* SQLi payload `admin'OR'1'='1'--` submitted. Server returns `Invalid username/email or password.` — no admin session granted:
+
+![VUL-01: SQL injection payload blocked — Invalid credentials flash shown](docs/images/vul01_sqli_blocked.png)
 
 ---
 
@@ -1317,7 +1335,9 @@ def manage_users():
 - Response: `HTTP 403 Forbidden` for both.
 - Pipeline: ✅ Pass.
 
-*Screenshot: [Insert 403 response screenshot post-fix]*
+*Screenshot (post-fix — re-test):* Viewer navigates to `https://localhost:5000/admin` and is redirected to the dashboard with `"You do not have permission to access that page."`:
+
+![VUL-03 (6.2): Viewer access to /admin rejected — RBAC enforced](docs/images/vul03_admin_denied.png)
 
 ---
 
@@ -1381,5 +1401,5 @@ The `feedback.html` template renders `{{ content | e }}` — Jinja2's autoescape
 
 ---
 
-> **Prepared by:** [Group 6]
+> **Prepared by:** Group 1
 > **GitHub Repository:** [[URL](https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline)] | **Deployment URL:** `https://[hostname]`
