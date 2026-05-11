@@ -345,7 +345,7 @@ Push / PR
 | VUL-06 | SSTI via `render_template_string()` with User Input | A03:2021 Injection | 8.8 | 🟠 High | SAST + Manual | Fixed |
 | VUL-07 | Vulnerable Flask + Werkzeug (CVE-2023-30861, CVE-2023-46136) | A06:2021 Vulnerable Components | 7.5 | 🟠 High | SCA | Fixed |
 | VUL-08 | `DEBUG=True` in Production (Stack Trace Disclosure) | A05:2021 Security Misconfiguration | 5.3 | 🟡 Medium | SAST + Manual | Fixed |
-| VUL-09 | Missing `HttpOnly` / `Secure` Flags on Session Cookie | A05:2021 Security Misconfiguration | 5.4 | 🟡 Medium | DAST | Fixed |
+| VUL-09 | Sensitive Cookie Without `Secure` Attribute | A02:2021 Cryptographic Failures | 6.8 | 🟡 Medium | DAST, SAST, Manual | Fixed |
 | VUL-10 | No Rate Limiting on `/login` and `/register` | A07:2021 Auth Failures | 7.5 | 🟠 High | Manual | Fixed |
 | VUL-11 | Unauthenticated to Admin Escalation Chain | A07:2021 + A01:2021 | 9.3 | 🔴 Critical | Manual | Fixed |
 | VUL-12 | Missing HTTP Security Headers | A05:2021 Security Misconfiguration | 6.1 | 🟡 Medium | DAST, Manual | Fixed |
@@ -570,7 +570,41 @@ return render_template_string(feedback.content)
 
 ---
 
-> *[VUL-07 through VUL-10: use the same template above, adjusting code and evidence per finding]*
+> *[VUL-07 and VUL-08: use the same template above, adjusting code and evidence per finding]*
+
+---
+
+#### VUL-09 — Sensitive Cookie in HTTPS Session Without 'Secure' Attribute
+
+**OWASP Category:** A02:2021 – Cryptographic Failures
+**CWE Reference:** CWE-614
+**CVSSv3 Score:** 6.8 (Medium)
+**CVSSv3 Vector:** `AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N`
+**Detection Method:** DAST (OWASP ZAP), SAST (Bandit B104), Manual
+
+**Description:**
+The Flask session cookie (`session=...`) is the sole credential for authenticated access. The `SESSION_COOKIE_SECURE` flag was not set, meaning the browser could transmit the cookie over plain HTTP connections. A passive network attacker (e.g., on the same Wi-Fi segment, a coffee shop, or a shared network) could capture the cookie with a packet sniffer and replay it to impersonate the victim — including admin users.
+
+**Affected Component:** `app/app.py` — Flask `app.config`
+
+**Proof of Concept:**
+```bash
+# Capture session cookie on the network (passive sniff, same segment)
+sudo tcpdump -i en0 -A 'tcp port 5000 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)' \
+  | grep -i "cookie: session"
+
+# Replay stolen cookie
+curl -b "session=eyJ1c2VyX2lkIjoxLCJyb2xlIjoiYWRtaW4ifQ.abc123" \
+  http://localhost:5000/admin
+```
+
+**Impact:**
+- Confidentiality: High — session hijack grants full account access
+- Integrity: High — attacker acts as the victim user
+- Availability: None
+
+**Remediation Applied:**
+Added `SESSION_COOKIE_SECURE=True` to the Flask `app.config.update()` block in `app.py`. This ensures browsers will only transmit the session cookie over encrypted HTTPS connections, rendering passive network sniffing ineffective.
 
 ---
 
