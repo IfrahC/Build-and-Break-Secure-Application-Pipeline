@@ -37,8 +37,8 @@ with automated security tools, manually pentest, document, remediate, and demo.
 
 ## Application Overview
 
-NexusPortal is a Flask 3 + SQLite web application. It implements a project and
-task management portal where users collaborate under strict role-based access
+NexusPortal is a Flask 3 + Supabase/Postgres web application. It implements a
+project and task management portal where users collaborate under strict role-based access
 controls. Every route is protected server-side — the application enforces who
 can see, create, edit, and delete data at the handler level, not just in the UI.
 
@@ -47,7 +47,7 @@ can see, create, edit, and delete data at the handler level, not just in the UI.
 | Layer | Technology |
 |---|---|
 | Web framework | Python 3.11 + Flask 3.1 |
-| Database | SQLite (file-based, no separate server needed) |
+| Database | Supabase Postgres via `DATABASE_URL` |
 | Templates | Jinja2 (auto-escaping enabled) |
 | Password storage | `werkzeug.security.generate_password_hash` (scrypt) |
 | Session security | `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE=Lax`, CSRF tokens |
@@ -76,6 +76,7 @@ Three seed accounts are created automatically on first run:
 | Docker Compose | v2+ | Included with Docker Desktop |
 | Python | 3.11+ | [python.org/downloads](https://www.python.org/downloads/) |
 | Git | 2.x | [git-scm.com](https://git-scm.com/) |
+| Supabase project | Free tier is enough | [supabase.com](https://supabase.com/) |
 
 Python is only required for the non-Docker path or running tests locally.
 
@@ -86,7 +87,8 @@ Python is only required for the non-Docker path or running tests locally.
 ### Option A — Docker (Recommended)
 
 Docker builds the image, initialises the database, and starts the app in one
-command. No Python installation required on the host.
+command. The container serves the Flask app with Gunicorn over local HTTPS, so
+no Python installation is required on the host.
 
 **1. Clone the repository**
 
@@ -95,24 +97,49 @@ git clone https://github.com/IfrahC/Build-and-Break-Secure-Application-Pipeline.
 cd Build-and-Break-Secure-Application-Pipeline
 ```
 
-**2. Start the application**
+**2. Configure Supabase**
+
+Create a `.env` file in the repository root from `.env.example` and paste your
+Supabase Postgres connection string:
+
+```bash
+cp .env.example .env
+```
+
+Set:
+
+```env
+DATABASE_URL=postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+FLASK_SECRET_KEY=replace-with-a-long-random-secret
+```
+
+Use Supabase's pooled Postgres connection string if your machine or deployment
+environment needs IPv4 compatibility.
+
+**3. Start the application**
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-The first run builds the image and initialises the SQLite database. Subsequent
+The first run builds the image, creates the Postgres schema in Supabase if it
+does not exist yet, seeds the demo accounts, and starts the app. Subsequent
 runs skip the build if nothing has changed:
 
 ```bash
 docker compose -f docker/docker-compose.yml up
 ```
 
-**3. Open in browser**
+**4. Open in browser**
 
 ```
-http://localhost:5000
+https://localhost:5000
 ```
+
+The Docker image uses a self-signed local certificate so the session cookie can
+keep the `Secure` flag required by the security findings. Your browser may show
+a privacy warning for this local certificate; choose the advanced/continue
+option for the demo, or trust the generated local certificate on your machine.
 
 **Stop the application**
 
@@ -128,12 +155,9 @@ docker compose -f docker/docker-compose.yml up --build
 
 **Inspect the database directly**
 
-```bash
-docker exec -it build-and-break-app sqlite3 /app/database/app.db
-sqlite> .tables
-sqlite> SELECT id, username, role FROM users;
-sqlite> .quit
-```
+Open the Supabase dashboard, choose your project, and use the SQL editor or
+Table Editor to inspect `users`, `projects`, `tasks`, `feedback`, and
+`activity_log`.
 
 ---
 
@@ -166,45 +190,64 @@ python -m venv .venv
 pip install -r app/requirements.txt
 ```
 
-**4. Run the application**
+**4. Configure Supabase**
+
+Create `.env` from `.env.example`, then set `DATABASE_URL` and
+`FLASK_SECRET_KEY`. In PowerShell for a one-off local run:
+
+```powershell
+$env:DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require"
+$env:FLASK_SECRET_KEY="replace-with-a-long-random-secret"
+```
+
+**5. Run the application**
 
 ```bash
 cd app
 python app.py
 ```
 
-**5. Open in browser**
+**6. Open in browser**
 
 ```
-http://localhost:5000
+https://localhost:5000
 ```
 
-The database file is created automatically at `app/database/app.db` on first
-run with the schema and three seed accounts.
+For direct Python runs, HTTPS is available when `app/database/cert.pem` and
+`app/database/key.pem` exist. The Docker path creates them automatically. The
+Supabase/Postgres schema is created automatically on first run with the schema
+and three seed accounts.
 
 ---
 
 ## Configuration
 
-The application reads the following environment variables at startup. All have
-safe defaults for local development — change them for any deployed environment.
+The application reads the following environment variables at startup. Docker
+requires the Supabase/Postgres URL and a fixed secret key.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FLASK_SECRET_KEY` | Random `secrets.token_hex(32)` | Signs session cookies. Set a fixed value so sessions survive restarts. |
-| `DATABASE_PATH` | `app/database/app.db` (local) / `/app/database/app.db` (Docker) | Path to the SQLite database file. |
+| `DATABASE_URL` | Required for Docker | Supabase Postgres connection string. |
+| `FLASK_SECRET_KEY` | Required in production | Signs session cookies. Set a fixed value so sessions survive restarts. |
+| `ADMIN_PASSWORD` | `Admin1234` in Compose | Seed admin password. |
+| `MEMBER_PASSWORD` | `Member1234` in Compose | Seed member password. |
+| `VIEWER_PASSWORD` | `Viewer1234` in Compose | Seed viewer password. |
+| `RATELIMIT_ENABLED` | `1` | Set to `0` only in tests. |
 | `FLASK_DEBUG` | `0` | Set to `1` to enable the Werkzeug debugger. Never use in production. |
 | `FLASK_RUN_HOST` | `127.0.0.1` | Interface to bind. The Docker image sets this to `0.0.0.0`. |
 
-**Setting a persistent secret key (Docker):**
+**Setting Supabase and session configuration (Docker):**
 
-Create a `.env` file next to `docker-compose.yml`:
+Create a `.env` file in the repository root:
 
 ```
+DATABASE_URL=postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
 FLASK_SECRET_KEY=replace-with-a-long-random-string
 ```
 
 The compose file will pick it up automatically via the `environment` block.
+Docker serves `https://localhost:5000` with a self-signed local certificate so
+authenticated sessions can keep `SESSION_COOKIE_SECURE=True`.
 
 ---
 
@@ -221,8 +264,9 @@ The compose file will pick it up automatically via the `environment` block.
 - **Logout** — clears the entire session and redirects to the landing page.
 - **CSRF protection** — every POST form includes a CSRF token generated with
   `secrets.token_urlsafe(32)` and validated server-side before processing.
-- **Session cookie flags** — `HttpOnly` and `SameSite=Lax` are set at the
-  application level.
+- **Session cookie flags** — `HttpOnly`, `Secure`, and `SameSite=Lax` are set
+  at the application level. The Docker runtime serves HTTPS so browsers will
+  send secure session cookies.
 
 ### Role-Based Access Control (RBAC)
 
@@ -294,6 +338,13 @@ Any authenticated user can submit feedback via the `/feedback` page.
 - Category: must be one of the four defined values
 - Message: 10–500 characters
 
+### Activity Logging
+
+Important application actions are written to the `activity_log` table:
+registration, login/logout, project changes, task changes, feedback
+submissions, and role changes. Admins can review the latest entries on the
+admin page.
+
 ### Admin Panel
 
 Accessible only to users with the `admin` role (`/admin`).
@@ -303,6 +354,7 @@ Accessible only to users with the `admin` role (`/admin`).
 - Safety guard: if only one admin account exists, that admin's role cannot be
   downgraded (prevents lockout)
 - View a project status breakdown summary
+- View recent activity recorded in the database
 
 ### Dashboard
 
@@ -340,102 +392,104 @@ The dashboard at `/dashboard` is role-aware:
 
 ## Database Schema
 
-The SQLite database lives at `app/database/app.db` (local) or
-`/app/database/app.db` (Docker). The schema is defined in
-`app/database/init.sql` and seed accounts are created by `app.py` on startup
-using `generate_password_hash`.
+Runtime persistence uses Supabase Postgres through `DATABASE_URL`. The
+Postgres schema is defined in `app/database/init_postgres.sql`; the SQLite
+schema in `app/database/init.sql` is retained only for fast local tests.
+Seed accounts are created by `app.py` on startup using
+`generate_password_hash`.
 
 ```
 users
-  id            INTEGER   Primary key
-  username      TEXT      Unique, 3–30 chars, letters/numbers/._-
+  id            BIGINT    Primary key
+  username      TEXT      Unique, 3-30 chars, letters/numbers/._-
   email         TEXT      Unique, validated format
   password_hash TEXT      scrypt hash via werkzeug
   role          TEXT      One of: admin | member | viewer
-  created_at    TIMESTAMP
+  created_at    TIMESTAMPTZ
 
 projects
-  id            INTEGER   Primary key
-  title         TEXT      3–80 chars
-  description   TEXT      10–500 chars
+  id            BIGINT    Primary key
+  title         TEXT      3-80 chars
+  description   TEXT      10-500 chars
   status        TEXT      One of: Planning | Active | Blocked | Completed
-  owner_id      INTEGER   FK → users.id  (CASCADE delete)
-  created_at    TIMESTAMP
-  updated_at    TIMESTAMP
+  owner_id      BIGINT    FK -> users.id  (CASCADE delete)
+  created_at    TIMESTAMPTZ
+  updated_at    TIMESTAMPTZ
 
 tasks
-  id            INTEGER   Primary key
-  project_id    INTEGER   FK → projects.id  (CASCADE delete)
-  title         TEXT      2–120 chars
-  assignee_id   INTEGER   FK → users.id  (SET NULL on delete), nullable
+  id            BIGINT    Primary key
+  project_id    BIGINT    FK -> projects.id  (CASCADE delete)
+  title         TEXT      2-120 chars
+  assignee_id   BIGINT    FK -> users.id  (SET NULL on delete), nullable
   status        TEXT      One of: Todo | In Progress | Done
   priority      TEXT      One of: Low | Medium | High
-  due_date      TEXT      YYYY-MM-DD, nullable
-  created_at    TIMESTAMP
-  updated_at    TIMESTAMP
+  due_date      DATE      Nullable
+  created_at    TIMESTAMPTZ
+  updated_at    TIMESTAMPTZ
 
 feedback
-  id            INTEGER   Primary key
-  user_id       INTEGER   FK → users.id  (CASCADE delete)
+  id            BIGINT    Primary key
+  user_id       BIGINT    FK -> users.id  (CASCADE delete)
   category      TEXT      One of: Bug | Security | Feature | General
-  message       TEXT      10–500 chars
+  message       TEXT      10-500 chars
   status        TEXT      One of: Open | Reviewed | Closed  (default Open)
-  submitted_at  TIMESTAMP
+  submitted_at  TIMESTAMPTZ
+
+activity_log
+  id            BIGINT    Primary key
+  actor_id      BIGINT    FK -> users.id  (SET NULL on delete)
+  action        TEXT      e.g. project.created, task.updated
+  entity_type   TEXT      user | session | project | task | feedback
+  entity_id     BIGINT    Nullable related entity id
+  details       JSONB     Structured event metadata
+  created_at    TIMESTAMPTZ
 ```
 
 Indexes: `projects.owner_id`, `projects.status`, `tasks.project_id`,
-`feedback.user_id`.
+`feedback.user_id`, `activity_log.actor_id`, and `activity_log.created_at`.
 
 ---
 
 ## Directory Structure
 
 ```
-├── app/
-│   ├── app.py                   # Flask application — all routes, auth, RBAC
-│   ├── __init__.py              # Package marker
-│   ├── requirements.txt         # Python runtime dependencies
-│   ├── database/
-│   │   └── init.sql             # Schema (seeds run via app.py on startup)
-│   ├── static/
-│   │   ├── css/style.css        # Application stylesheet
-│   │   └── js/app.js            # Minimal client-side JS
-│   └── templates/
-│       ├── base.html            # Base layout (nav, flash messages)
-│       ├── index.html           # Public landing page
-│       ├── login.html           # Login form
-│       ├── register.html        # Registration form
-│       ├── dashboard.html       # Role-aware dashboard
-│       ├── projects.html        # Project list + search/filter
-│       ├── project_form.html    # Create / edit project form
-│       ├── project_detail.html  # Project detail + task management
-│       ├── feedback.html        # Feedback form + list
-│       └── admin.html           # Admin panel (role management)
-├── docker/
-│   ├── Dockerfile               # Non-root user (nexus), production-ready
-│   ├── docker-compose.yml       # Compose config
-│   └── docker-entrypoint.sh    # DB init + Flask startup
-├── tests/
-│   ├── __init__.py
-│   ├── requirements-test.txt    # pytest, coverage
-│   └── test_app.py              # Functional test suite
-├── .github/
-│   ├── workflows/
-│   │   ├── sast.yml             # Bandit + Semgrep + TruffleHog
-│   │   ├── sca.yml              # pip-audit + Safety (weekly schedule)
-│   │   ├── dast.yml             # OWASP ZAP baseline scan
-│   │   └── coverage.yml         # pytest + coverage artifacts
-│   └── ISSUE_TEMPLATE/          # GitHub Issue templates
-├── docs/
-│   ├── threat-model-template.md
-│   ├── exploitation-report-template.md
-│   ├── remediation-report-template.md
-│   ├── executive-summary-template.md
-│   └── weekly-plan.md
-├── .zap/rules.tsv               # ZAP alert suppression rules
-├── .trufflehog.yml              # TruffleHog configuration
-├── CONTRIBUTIONS.md             # Per-member task and commit tracking
-└── README.md
+app/
+  app.py                    # Flask application: routes, auth, RBAC
+  db.py                     # Supabase/Postgres + test SQLite adapter
+  __init__.py               # Package marker
+  requirements.txt          # Python runtime dependencies
+  database/
+    init.sql                # SQLite test schema
+    init_postgres.sql       # Supabase/Postgres runtime schema
+  static/
+    css/style.css           # Application stylesheet
+    js/app.js               # Minimal client-side JS
+  templates/
+    base.html               # Base layout (nav, flash messages)
+    index.html              # Public landing page
+    login.html              # Login form
+    register.html           # Registration form
+    dashboard.html          # Role-aware dashboard
+    projects.html           # Project list + search/filter
+    project_form.html       # Create / edit project form
+    project_detail.html     # Project detail + task management
+    feedback.html           # Feedback form + list
+    admin.html              # Admin panel and activity log
+docker/
+  Dockerfile                # Non-root user (nexus), production-ready
+  docker-compose.yml        # Compose config
+  docker-entrypoint.sh      # Supabase env validation + Flask startup
+tests/
+  __init__.py
+  requirements-test.txt     # pytest, coverage
+  test_app.py               # Functional test suite
+.github/
+  workflows/                # SAST, SCA, DAST, coverage
+  ISSUE_TEMPLATE/           # GitHub Issue templates
+docs/                       # Security report templates and weekly plan
+.env.example                # Supabase/Postgres env template
+CONTRIBUTIONS.md            # Per-member task and commit tracking
+README.md
 ```
 
 ---
@@ -505,6 +559,7 @@ docker run --rm -v $(pwd):/zap/wrk/:rw -t ghcr.io/zaproxy/zaproxy \
 ## Running Tests
 
 ```bash
+pip install -r app/requirements.txt
 pip install -r tests/requirements-test.txt
 pytest tests/ -v
 ```

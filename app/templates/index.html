@@ -1,26 +1,45 @@
 {% extends "base.html" %}
-{% block title %}NexusPortal · RBAC Project Management{% endblock %}
+{% block title %}NexusPortal - Secure Project Operations{% endblock %}
 
 {% block content %}
-<section class="hero">
-  <div>
-    <p class="eyebrow">RBAC project operations</p>
+<section class="hero landing-hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Internal project operations</p>
     <h1>NexusPortal</h1>
     <p class="lede">
-      A secure internal project management portal with admin, member, and viewer
-      roles for a complete DevSecOps build, test, attack, and remediation demo.
+      A focused workspace for DevSecOps teams to coordinate delivery, capture
+      security feedback, and keep remediation work moving from build to proof.
     </p>
     <div class="actions">
-      <a class="button" href="{{ url_for('login') }}">Login</a>
+      <a class="button" href="{{ url_for('login') }}">Sign in</a>
       <a class="button secondary" href="{{ url_for('register') }}">Create account</a>
     </div>
+    <div class="mission-strip" aria-label="DevSecOps workflow stages">
+      <span>Build</span>
+      <span>Test</span>
+      <span>Attack</span>
+      <span>Remediate</span>
+    </div>
   </div>
-  <aside class="hero-panel">
-    <p class="panel-title">Demo accounts</p>
-    <dl class="account-list">
-      <div><dt>Admin</dt><dd>admin@nexus.local / Admin1234</dd></div>
-      <div><dt>Member</dt><dd>member@nexus.local / Member1234</dd></div>
-      <div><dt>Viewer</dt><dd>viewer@nexus.local / Viewer1234</dd></div>
+
+  <aside class="hero-panel operations-panel" aria-label="Operational readiness preview">
+    <div class="panel-header">
+      <p class="panel-title">Operations Snapshot</p>
+      <span class="status live">Ready</span>
+    </div>
+    <dl class="signal-list">
+      <div>
+        <dt>Portfolio</dt>
+        <dd>Project status, ownership, and delivery risk in one workspace.</dd>
+      </div>
+      <div>
+        <dt>Remediation</dt>
+        <dd>Task tracking stays tied to the evidence teams need for fixes.</dd>
+      </div>
+      <div>
+        <dt>Feedback</dt>
+        <dd>Security observations and product issues are captured in flow.</dd>
+      </div>
     </dl>
   </aside>
 </section>
@@ -28,15 +47,15 @@
 <section class="feature-grid">
   <article>
     <h2>Admin Control</h2>
-    <p>Manage user roles, inspect portfolio status, and review feedback.</p>
+    <p>Centralized governance for role stewardship, portfolio health, and system activity without exposing admin tools to the wider workspace.</p>
   </article>
   <article>
     <h2>Member Workflow</h2>
-    <p>Create projects, maintain task lists, and update delivery status.</p>
+    <p>Structured execution for project owners to create work, manage tasks, filter priorities, and move remediation forward with clear accountability.</p>
   </article>
   <article>
     <h2>Viewer Access</h2>
-    <p>Read-only project visibility with protected write operations.</p>
+    <p>Clean operational visibility for stakeholders who need project context and security posture without mutation controls competing for attention.</p>
   </article>
 </section>
 {% endblock %}

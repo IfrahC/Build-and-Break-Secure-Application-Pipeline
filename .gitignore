@@ -10,3 +10,4 @@ pip-audit-results.json
 safety-results.json
 zap-report.html
 app/database/app.db
+.env

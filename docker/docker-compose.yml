@@ -4,10 +4,15 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: build-and-break-app
+    env_file:
+      - ../.env
     ports:
       - "5000:5000"
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=0
       - FLASK_RUN_HOST=0.0.0.0
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin1234}
+      - MEMBER_PASSWORD=${MEMBER_PASSWORD:-Member1234}
+      - VIEWER_PASSWORD=${VIEWER_PASSWORD:-Viewer1234}
     restart: unless-stopped

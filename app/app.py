@@ -10,7 +10,6 @@ search/filtering, and persistence for security testing.
 import os
 import re
 import secrets
-import sqlite3
 from datetime import datetime
 from functools import wraps
 
@@ -26,37 +25,68 @@ from flask import (
     url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+try:
+    from .db import connect_database, ensure_database_parent, resolve_database_url, schema_path_for
+except ImportError:
+    from db import connect_database, ensure_database_parent, resolve_database_url, schema_path_for
 
 
 BASE_DIR = os.path.dirname(__file__)
-DATABASE = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "database", "app.db"))
-SECRET_KEY = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+DATABASE_URL = resolve_database_url(BASE_DIR)
+SECRET_KEY = os.environ.get("FLASK_SECRET_KEY")
+if not SECRET_KEY:
+    if os.environ.get("FLASK_ENV") == "production":
+        raise RuntimeError("FLASK_SECRET_KEY environment variable must be set")
+    SECRET_KEY = secrets.token_hex(32)
 
 ROLES = ("admin", "member", "viewer")
 PROJECT_STATUSES = ("Planning", "Active", "Blocked", "Completed")
 TASK_STATUSES = ("Todo", "In Progress", "Done")
 TASK_PRIORITIES = ("Low", "Medium", "High")
 FEEDBACK_CATEGORIES = ("Bug", "Security", "Feature", "General")
+PASSWORD_RE = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$")
 
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=SECRET_KEY,
     SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    RATELIMIT_ENABLED=os.environ.get("RATELIMIT_ENABLED", "1") != "0",
 )
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://",
+)
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none';"
+    )
+    return response
 
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return connect_database(DATABASE_URL)
 
 
 def init_db():
     """Create schema and seed demo users/data if missing."""
-    os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
-    schema_path = os.path.join(BASE_DIR, "database", "init.sql")
+    ensure_database_parent(DATABASE_URL)
+    schema_path = schema_path_for(BASE_DIR, DATABASE_URL)
 
     db = get_db()
     with open(schema_path, encoding="utf-8") as schema_file:
@@ -69,10 +99,19 @@ def init_db():
 
 
 def seed_users(db):
+    admin_pw = os.environ.get("ADMIN_PASSWORD", secrets.token_hex(8))
+    member_pw = os.environ.get("MEMBER_PASSWORD", secrets.token_hex(8))
+    viewer_pw = os.environ.get("VIEWER_PASSWORD", secrets.token_hex(8))
+    
+    if "ADMIN_PASSWORD" not in os.environ:
+        print(f"[*] Generated random admin password: {admin_pw}")
+        print(f"[*] Generated random member password: {member_pw}")
+        print(f"[*] Generated random viewer password: {viewer_pw}")
+
     users = [
-        ("admin", "admin@nexus.local", "Admin1234", "admin"),
-        ("member", "member@nexus.local", "Member1234", "member"),
-        ("viewer", "viewer@nexus.local", "Viewer1234", "viewer"),
+        ("admin", "admin@nexus.local", admin_pw, "admin"),
+        ("member", "member@nexus.local", member_pw, "member"),
+        ("viewer", "viewer@nexus.local", viewer_pw, "viewer"),
     ]
     for username, email, password, role in users:
         exists = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -118,19 +157,37 @@ def seed_projects(db):
             (title, description, status, owner_id),
         )
 
+    security_project = db.execute(
+        "SELECT id FROM projects WHERE title = ?",
+        ("Security Review Portal",),
+    ).fetchone()
     db.execute(
         """
         INSERT INTO tasks (project_id, title, assignee_id, status, priority, due_date)
-        VALUES (1, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        ("Document STRIDE threats", member["id"], "In Progress", "High", "2026-05-03"),
+        (
+            security_project["id"],
+            "Document STRIDE threats",
+            member["id"],
+            "In Progress",
+            "High",
+            "2026-05-03",
+        ),
     )
     db.execute(
         """
         INSERT INTO tasks (project_id, title, assignee_id, status, priority, due_date)
-        VALUES (1, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        ("Review executive summary", viewer["id"], "Todo", "Medium", "2026-05-08"),
+        (
+            security_project["id"],
+            "Review executive summary",
+            viewer["id"],
+            "Todo",
+            "Medium",
+            "2026-05-08",
+        ),
     )
 
 
@@ -190,7 +247,7 @@ def login_required(view):
     def wrapped_view(*args, **kwargs):
         if g.user is None:
             flash("Please log in first.", "warning")
-            return redirect(url_for("login", next=request.path))
+            return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -202,7 +259,7 @@ def roles_required(*allowed_roles):
         def wrapped_view(*args, **kwargs):
             if g.user is None:
                 flash("Please log in first.", "warning")
-                return redirect(url_for("login", next=request.path))
+                return redirect(url_for("login"))
             if g.user["role"] not in allowed_roles:
                 flash("You do not have permission to access that page.", "danger")
                 return redirect(url_for("dashboard"))
@@ -219,6 +276,19 @@ def can_manage_project(project):
 
 def can_edit_content():
     return g.user and g.user["role"] in ("admin", "member")
+
+
+def log_activity(db, action, entity_type, entity_id=None, details=None, actor_id=None):
+    if actor_id is None and g.get("user"):
+        actor_id = g.user["id"]
+
+    db.execute(
+        """
+        INSERT INTO activity_log (actor_id, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (actor_id, action, entity_type, entity_id, details or {}),
+    )
 
 
 def is_valid_email(email):
@@ -266,6 +336,7 @@ def index():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def register():
     if g.user:
         return redirect(url_for("dashboard"))
@@ -281,31 +352,44 @@ def register():
             errors.append("Username must be 3 to 30 characters and use letters, numbers, dot, dash, or underscore.")
         if not is_valid_email(email):
             errors.append("Enter a valid email address.")
-        if len(password) < 8 or not re.search(r"\d", password):
-            errors.append("Password must be at least 8 characters and include a number.")
+        if not PASSWORD_RE.fullmatch(password):
+            errors.append(
+                "Password must be at least 10 characters and include uppercase, "
+                "lowercase, a number, and a special character."
+            )
         if password != confirm_password:
             errors.append("Passwords do not match.")
+
+        if errors:
+            for error in errors:
+                flash(error, "danger")
+            return render_template("register.html", username=username, email=email)
 
         db = get_db()
         duplicate = db.execute(
             "SELECT id FROM users WHERE username = ? OR email = ?",
             (username, email),
         ).fetchone()
+        
         if duplicate:
-            errors.append("That username or email is already registered.")
-
-        if errors:
             db.close()
-            for error in errors:
-                flash(error, "danger")
+            flash("Username or email is already registered.", "danger")
             return render_template("register.html", username=username, email=email)
 
-        db.execute(
+        cursor = db.execute(
             """
             INSERT INTO users (username, email, password_hash, role)
             VALUES (?, ?, ?, 'member')
             """,
             (username, email, generate_password_hash(password)),
+        )
+        log_activity(
+            db,
+            "user.registered",
+            "user",
+            getattr(cursor, "lastrowid", None),
+            {"username": username, "email": email, "role": "member"},
+            actor_id=getattr(cursor, "lastrowid", None),
         )
         db.commit()
         db.close()
@@ -316,6 +400,7 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def login():
     if g.user:
         return redirect(url_for("dashboard"))
@@ -342,6 +427,16 @@ def login():
             session["username"] = user["username"]
             session["csrf_token"] = secrets.token_urlsafe(32)
             session.permanent = False
+            audit_db = get_db()
+            log_activity(
+                audit_db,
+                "user.login",
+                "session",
+                details={"username": user["username"]},
+                actor_id=user["id"],
+            )
+            audit_db.commit()
+            audit_db.close()
             flash(f"Welcome back, {user['username']}.", "success")
             return redirect(url_for("dashboard"))
 
@@ -353,6 +448,10 @@ def login():
 @app.route("/logout")
 @login_required
 def logout():
+    db = get_db()
+    log_activity(db, "user.logout", "session", details={"username": g.user["username"]})
+    db.commit()
+    db.close()
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("index"))
@@ -446,7 +545,7 @@ def projects():
         WHERE (? = '' OR p.title LIKE ? OR p.description LIKE ?)
           AND (? = '' OR p.status = ?)
           AND (? != 'member' OR p.owner_id = ?)
-        GROUP BY p.id
+        GROUP BY p.id, u.username
         ORDER BY p.updated_at DESC
         """,
         tuple(params),
@@ -467,12 +566,19 @@ def new_project():
             return render_template("project_form.html", project=form_project, mode="Create")
 
         db = get_db()
-        db.execute(
+        cursor = db.execute(
             """
             INSERT INTO projects (title, description, status, owner_id)
             VALUES (?, ?, ?, ?)
             """,
             (title, description, status, g.user["id"]),
+        )
+        log_activity(
+            db,
+            "project.created",
+            "project",
+            getattr(cursor, "lastrowid", None),
+            {"title": title, "status": status},
         )
         db.commit()
         db.close()
@@ -504,7 +610,7 @@ def project_detail(project_id):
         (project_id,),
     ).fetchall()
     users = db.execute(
-        "SELECT id, username, role FROM users ORDER BY username"
+        "SELECT id, username FROM users ORDER BY username"
     ).fetchall()
     db.close()
     return render_template(
@@ -541,6 +647,13 @@ def edit_project(project_id):
             """,
             (title, description, status, project_id),
         )
+        log_activity(
+            db,
+            "project.updated",
+            "project",
+            project_id,
+            {"title": title, "status": status},
+        )
         db.commit()
         db.close()
         flash("Project updated.", "success")
@@ -559,6 +672,13 @@ def delete_project(project_id):
 
     db = get_db()
     db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    log_activity(
+        db,
+        "project.deleted",
+        "project",
+        project_id,
+        {"title": project["title"]},
+    )
     db.commit()
     db.close()
     flash("Project deleted.", "success")
@@ -604,7 +724,7 @@ def create_task(project_id):
         return redirect(url_for("project_detail", project_id=project_id))
 
     db = get_db()
-    db.execute(
+    cursor = db.execute(
         """
         INSERT INTO tasks (project_id, title, assignee_id, status, priority, due_date)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -614,6 +734,13 @@ def create_task(project_id):
     db.execute(
         "UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (project_id,),
+    )
+    log_activity(
+        db,
+        "task.created",
+        "task",
+        getattr(cursor, "lastrowid", None),
+        {"project_id": project_id, "title": title, "status": status, "priority": priority},
     )
     db.commit()
     db.close()
@@ -661,6 +788,13 @@ def update_task(task_id):
         "UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (task["project_id"],),
     )
+    log_activity(
+        db,
+        "task.updated",
+        "task",
+        task_id,
+        {"project_id": task["project_id"], "status": status, "priority": priority},
+    )
     db.commit()
     db.close()
     flash("Task updated.", "success")
@@ -693,6 +827,13 @@ def delete_task(task_id):
         "UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (task["project_id"],),
     )
+    log_activity(
+        db,
+        "task.deleted",
+        "task",
+        task_id,
+        {"project_id": task["project_id"], "title": task["title"]},
+    )
     db.commit()
     db.close()
     flash("Task deleted.", "success")
@@ -716,12 +857,19 @@ def feedback():
                 flash(error, "danger")
         else:
             db = get_db()
-            db.execute(
+            cursor = db.execute(
                 """
                 INSERT INTO feedback (user_id, category, message)
                 VALUES (?, ?, ?)
                 """,
                 (g.user["id"], category, message),
+            )
+            log_activity(
+                db,
+                "feedback.submitted",
+                "feedback",
+                getattr(cursor, "lastrowid", None),
+                {"category": category},
             )
             db.commit()
             db.close()
@@ -764,20 +912,34 @@ def admin():
 
         if role not in ROLES or target is None:
             flash("Choose a valid user and role.", "danger")
-        elif target["role"] == "admin" and role != "admin":
-            admin_count = db.execute(
-                "SELECT COUNT(*) AS total FROM users WHERE role = 'admin'"
-            ).fetchone()["total"]
-            if admin_count <= 1:
+        else:
+            cursor = db.execute(
+                """
+                UPDATE users
+                SET role = ?
+                WHERE id = ?
+                  AND (
+                    role != 'admin'
+                    OR ? = 'admin'
+                    OR (SELECT COUNT(*) FROM users WHERE role = 'admin') > 1
+                  )
+                """,
+                (role, user_id, role),
+            )
+            if cursor.rowcount == 0 and target["role"] == "admin" and role != "admin":
                 flash("At least one admin account must remain.", "danger")
+            elif cursor.rowcount == 0:
+                flash("Choose a valid user and role.", "danger")
             else:
-                db.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+                log_activity(
+                    db,
+                    "user.role_changed",
+                    "user",
+                    user_id,
+                    {"new_role": role},
+                )
                 db.commit()
                 flash("Role updated.", "success")
-        else:
-            db.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
-            db.commit()
-            flash("Role updated.", "success")
 
     users = db.execute(
         """
@@ -794,11 +956,30 @@ def admin():
     status_rows = db.execute(
         "SELECT status, COUNT(*) AS total FROM projects GROUP BY status"
     ).fetchall()
+    recent_activity = db.execute(
+        """
+        SELECT a.*, u.username
+        FROM activity_log a
+        LEFT JOIN users u ON u.id = a.actor_id
+        ORDER BY a.created_at DESC
+        LIMIT 10
+        """
+    ).fetchall()
     db.close()
-    return render_template("admin.html", users=users, status_rows=status_rows)
+    return render_template(
+        "admin.html",
+        users=users,
+        status_rows=status_rows,
+        recent_activity=recent_activity,
+    )
 
 
 if __name__ == "__main__":
     init_db()
     host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
-    app.run(host=host, port=5000, debug=os.environ.get("FLASK_DEBUG") == "1")
+    cert_path = os.path.join(BASE_DIR, "database", "cert.pem")
+    key_path = os.path.join(BASE_DIR, "database", "key.pem")
+    ssl_context = None
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+    app.run(host=host, port=5000, debug=os.environ.get("FLASK_DEBUG") == "1", ssl_context=ssl_context)

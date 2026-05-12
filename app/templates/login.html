@@ -1,12 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Login · NexusPortal{% endblock %}
+{% block title %}Sign in - NexusPortal{% endblock %}
 
 {% block content %}
 <section class="auth-layout">
-  <div>
-    <p class="eyebrow">Welcome back</p>
+  <div class="auth-copy">
+    <p class="eyebrow">Workspace access</p>
     <h1>Sign in to NexusPortal</h1>
-    <p class="muted">Use a username or email address. Sessions are cleared on login and logout.</p>
+    <p class="muted">Use your username or email address to continue into the internal project workspace.</p>
+    <ul class="auth-points">
+      <li>Session state is refreshed on every sign-in.</li>
+      <li>Workspace actions are tailored to your assigned role.</li>
+      <li>Project, task, and feedback workflows stay in one place.</li>
+    </ul>
   </div>
 
   <form class="form-card" method="post">
@@ -19,7 +24,7 @@
       Password
       <input name="password" type="password" autocomplete="current-password" required>
     </label>
-    <button class="button" type="submit">Login</button>
+    <button class="button" type="submit">Sign in</button>
     <p class="form-note">No account yet? <a href="{{ url_for('register') }}">Register as a member</a>.</p>
   </form>
 </section>

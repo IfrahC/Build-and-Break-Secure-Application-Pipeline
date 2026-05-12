@@ -10,13 +10,20 @@ def app():
 
     import importlib
 
+    os.environ.setdefault("FLASK_SECRET_KEY", "test-secret")
+    os.environ.setdefault("ADMIN_PASSWORD", "Admin1234")
+    os.environ.setdefault("MEMBER_PASSWORD", "Member1234")
+    os.environ.setdefault("VIEWER_PASSWORD", "Viewer1234")
+    os.environ.setdefault("RATELIMIT_ENABLED", "0")
+
     flask_app_module = importlib.import_module("app.app")
 
-    flask_app_module.DATABASE = db_path
+    flask_app_module.DATABASE_URL = "sqlite:///" + db_path.replace("\\", "/")
     flask_app_module.app.config.update(
         TESTING=True,
         SECRET_KEY="test-secret",
         CSRF_ENABLED=False,
+        RATELIMIT_ENABLED=False,
     )
 
     with flask_app_module.app.app_context():
@@ -77,8 +84,8 @@ def test_register_validates_and_creates_member(client):
         data={
             "username": "newmember",
             "email": "newmember@example.com",
-            "password": "Pass12345",
-            "confirm_password": "Pass12345",
+            "password": "Pass12345!",
+            "confirm_password": "Pass12345!",
         },
         follow_redirects=True,
     )
@@ -87,10 +94,37 @@ def test_register_validates_and_creates_member(client):
 
     response = client.post(
         "/login",
-        data={"identifier": "newmember", "password": "Pass12345"},
+        data={"identifier": "newmember", "password": "Pass12345!"},
         follow_redirects=True,
     )
     assert b"Dashboard" in response.data
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "password1",
+        "12345678",
+        "aaaaaaaa1",
+        "letmein1",
+        "Password123",
+        "password123!",
+        "PASSWORD123!",
+        "Password!!!",
+    ],
+)
+def test_register_rejects_weak_passwords(client, password):
+    response = client.post(
+        "/register",
+        data={
+            "username": "weakmember",
+            "email": "weakmember@example.com",
+            "password": password,
+            "confirm_password": password,
+        },
+        follow_redirects=True,
+    )
+    assert b"at least 10 characters" in response.data
 
 
 def test_register_rejects_duplicate_user(client):
@@ -99,8 +133,8 @@ def test_register_rejects_duplicate_user(client):
         data={
             "username": "member",
             "email": "other@example.com",
-            "password": "Pass12345",
-            "confirm_password": "Pass12345",
+            "password": "Pass12345!",
+            "confirm_password": "Pass12345!",
         },
         follow_redirects=True,
     )
@@ -111,7 +145,8 @@ def test_protected_routes_redirect_when_unauthenticated(client):
     for path in ["/dashboard", "/projects", "/feedback", "/admin"]:
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 302
-        assert "/login" in response.headers["Location"]
+        assert response.headers["Location"] == "/login"
+        assert "next=" not in response.headers["Location"]
 
 
 def test_member_project_crud(client):
@@ -186,6 +221,72 @@ def test_admin_can_access_admin_page_and_update_roles(client):
     assert b"Role updated" in response.data
 
 
+def test_admin_cannot_demote_only_admin(client):
+    login(client, "admin", "Admin1234")
+
+    response = client.post(
+        "/admin",
+        data={"user_id": "1", "role": "member"},
+        follow_redirects=True,
+    )
+    assert b"At least one admin account must remain" in response.data
+
+    from app.app import get_db
+
+    db = get_db()
+    admin = db.execute("SELECT role FROM users WHERE id = ?", ("1",)).fetchone()
+    db.close()
+    assert admin["role"] == "admin"
+
+
+def test_admin_can_demote_admin_when_another_admin_exists(client):
+    login(client, "admin", "Admin1234")
+
+    promote_response = client.post(
+        "/admin",
+        data={"user_id": "3", "role": "admin"},
+        follow_redirects=True,
+    )
+    assert b"Role updated" in promote_response.data
+
+    demote_response = client.post(
+        "/admin",
+        data={"user_id": "1", "role": "member"},
+        follow_redirects=True,
+    )
+    assert b"Role updated" in demote_response.data
+
+    from app.app import get_db
+
+    db = get_db()
+    roles = db.execute(
+        "SELECT id, role FROM users WHERE id IN (?, ?) ORDER BY id",
+        ("1", "3"),
+    ).fetchall()
+    db.close()
+    assert [user["role"] for user in roles] == ["member", "admin"]
+
+
+def test_admin_can_review_activity_log(client):
+    login(client)
+    client.post(
+        "/projects/new",
+        data={
+            "title": "Activity Trail",
+            "description": "Confirm meaningful actions are saved to the activity log.",
+            "status": "Active",
+        },
+        follow_redirects=True,
+    )
+    client.get("/logout", follow_redirects=True)
+
+    login(client, "admin", "Admin1234")
+    response = client.get("/admin")
+
+    assert response.status_code == 200
+    assert b"project.created" in response.data
+
+
 def test_feedback_submission(client):
     login(client)
     response = client.post(
@@ -222,3 +323,15 @@ def test_task_create_update_delete(client):
 
     response = client.post("/tasks/3/delete", follow_redirects=True)
     assert b"Task deleted" in response.data
+
+
+def test_project_task_assignee_dropdown_does_not_disclose_roles(client):
+    login(client, "member", "Member1234")
+
+    response = client.get("/projects/2")
+
+    assert response.status_code == 200
+    assert b"admin &#183; admin" not in response.data
+    assert b"member &#183; member" not in response.data
+    assert b"viewer &#183; viewer" not in response.data
+    assert b'<option value="1">admin</option>' in response.data

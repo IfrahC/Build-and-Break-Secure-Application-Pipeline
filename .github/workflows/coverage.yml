@@ -36,6 +36,9 @@ jobs:
         env:
           FLASK_ENV: testing
           FLASK_SECRET_KEY: test-secret-key-not-for-production
+          ADMIN_PASSWORD: Admin1234
+          MEMBER_PASSWORD: Member1234
+          VIEWER_PASSWORD: Viewer1234
 
       - name: Print coverage report
         run: coverage report -m

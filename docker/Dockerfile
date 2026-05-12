@@ -8,7 +8,7 @@ ENV FLASK_RUN_HOST=0.0.0.0
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 && \
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY app/requirements.txt .

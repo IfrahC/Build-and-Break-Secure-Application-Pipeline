@@ -6,30 +6,23 @@
   <title>{% block title %}NexusPortal{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="{% if current_user %}is-authenticated{% else %}is-public{% endif %}">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
   <header class="topbar">
-    <a class="brand" href="{{ url_for('dashboard') if current_user else url_for('index') }}">
-      <span class="brand-mark">NP</span>
-      <span>NexusPortal</span>
-    </a>
-    <nav class="nav">
-      {% if current_user %}
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('projects') }}">Projects</a>
-        <a href="{{ url_for('feedback') }}">Feedback</a>
-        {% if current_user.role == 'admin' %}
-          <a href="{{ url_for('admin') }}">Admin</a>
-        {% endif %}
-        <span class="user-chip">{{ current_user.username }} · {{ current_user.role }}</span>
-        <a class="button ghost" href="{{ url_for('logout') }}">Logout</a>
-      {% else %}
-        <a href="{{ url_for('login') }}">Login</a>
-        <a class="button" href="{{ url_for('register') }}">Register</a>
-      {% endif %}
-    </nav>
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('dashboard') if current_user else url_for('index') }}" aria-label="NexusPortal home">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span class="brand-copy">
+          <span class="brand-name">NexusPortal</span>
+          <span class="brand-subtitle">Secure delivery workspace</span>
+        </span>
+      </a>
+      {% include "partials/navigation.html" %}
+    </div>
   </header>
 
-  <main class="page">
+  <main id="main-content" class="page">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <section class="flash-stack" aria-live="polite">

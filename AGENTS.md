@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-NexusPortal is a Flask + SQLite role-based project management system for a
+NexusPortal is a Flask + Supabase/Postgres role-based project management system for a
 DevSecOps "Build and Break" assignment. The app must remain a good domain
 application with working RBAC, sessions, CRUD, validation, data handling, and
 security testing deliverables.

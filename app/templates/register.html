@@ -1,12 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Register · NexusPortal{% endblock %}
+{% block title %}Create account - NexusPortal{% endblock %}
 
 {% block content %}
 <section class="auth-layout">
-  <div>
-    <p class="eyebrow">New member</p>
-    <h1>Create an account</h1>
-    <p class="muted">New registrations start as members. Admins can later change roles.</p>
+  <div class="auth-copy">
+    <p class="eyebrow">Member registration</p>
+    <h1>Create your workspace account</h1>
+    <p class="muted">Self-registration creates a member account. Admins can assign viewer or admin access from Admin Control after review.</p>
+    <ul class="auth-points">
+      <li>Use a real email address for audit-friendly ownership.</li>
+      <li>Choose a strong password with mixed characters.</li>
+      <li>After registration, sign in to reach your dashboard.</li>
+    </ul>
   </div>
 
   <form class="form-card" method="post">
@@ -21,11 +26,11 @@
     </label>
     <label>
       Password
-      <input name="password" type="password" minlength="8" required>
+      <input name="password" type="password" minlength="10" autocomplete="new-password" required>
     </label>
     <label>
       Confirm password
-      <input name="confirm_password" type="password" minlength="8" required>
+      <input name="confirm_password" type="password" minlength="10" autocomplete="new-password" required>
     </label>
     <button class="button" type="submit">Create account</button>
   </form>
