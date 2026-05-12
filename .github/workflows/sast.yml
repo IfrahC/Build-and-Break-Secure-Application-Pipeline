@@ -133,6 +133,10 @@ jobs:
         with:
           fetch-depth: 0   # full history for secret scanning
 
+      - name: Skip TruffleHog if BASE == HEAD # prevents false positives on new branches with no changes
+        if: ${{ github.event.before == github.sha }}
+        run: echo "Skipping TruffleHog: BASE and HEAD are the same."
+
       - name: Run TruffleHog
         uses: trufflesecurity/trufflehog@main
         with:
