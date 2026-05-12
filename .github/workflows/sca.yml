@@ -34,7 +34,23 @@ jobs:
       - name: Run pip-audit (human-readable output)
         run: |
           echo "=== pip-audit Results (OSV Database) ==="
-          pip-audit -r app/requirements.txt || true
+          pip-audit -r app/requirements.txt
+
+      - name: Quality gate — fail on any known vulnerability
+        run: |
+          python - <<'EOF'
+          import json, sys
+          with open("pip-audit-results.json") as f:
+              data = json.load(f)
+          vulns = [dep for dep in data.get("dependencies", []) if dep.get("vulns")]
+          if vulns:
+              print(f"QUALITY GATE FAILED: {len(vulns)} vulnerable package(s):")
+              for dep in vulns:
+                  for v in dep["vulns"]:
+                      print(f"  {dep['name']}=={dep['version']} — {v['id']}: {v.get('description','')[:100]}")
+              sys.exit(1)
+          print("Quality gate passed: no known vulnerabilities found by pip-audit.")
+          EOF
 
       - name: Upload pip-audit results
         uses: actions/upload-artifact@v4
@@ -63,10 +79,10 @@ jobs:
           safety scan -r app/requirements.txt \
                        --json > safety-results.json 2>&1 || true
 
-      - name: Run Safety (human-readable output)
+      - name: Run Safety (human-readable output — quality gate)
         run: |
           echo "=== Safety Check Results (PyUp Database) ==="
-          safety check -r app/requirements.txt || true
+          safety check -r app/requirements.txt
 
       - name: Upload Safety results
         uses: actions/upload-artifact@v4
