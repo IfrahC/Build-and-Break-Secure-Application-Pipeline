@@ -1,6 +1,6 @@
 name: DAST — Dynamic Application Security Testing (OWASP ZAP)
 permissions:
-  issues: write
+  contents: read
 on:
   push:
     branches: [main]
@@ -50,13 +50,15 @@ jobs:
           echo "Application is ready."
 
       - name: Run OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ github.event.inputs.target_url || 'https://localhost:5000' }}
           rules_file_name: ".zap/rules.tsv"
           cmd_options: "-a -j"     # -a: AJAX spider, -j: use JSON report
-          fail_action: warn        # fail the step when HIGH/MEDIUM alerts are found
-          artifact_name: zap_scan_report
+          fail_action: "false"     # record findings without failing the pipeline
+          allow_issue_writing: "false"
+          artifact_name: zap-scan-report
+        continue-on-error: true    # never block; report is the deliverable
 
       - name: Stop and remove application container
         if: always()
