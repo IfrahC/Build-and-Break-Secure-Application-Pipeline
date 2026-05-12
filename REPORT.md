@@ -355,6 +355,25 @@ Current retest evidence from the local audit: `python -m pytest tests -q` passed
 
 ---
 
+### 4.1.1 OWASP Top 10 (2021) Full Coverage Map
+
+The table below maps every OWASP Top 10 category to findings in this assessment. Categories with no applicable finding are documented with a reasoned justification.
+
+| # | OWASP Category | Findings | Coverage |
+|---|---------------|----------|----------|
+| A01:2021 | Broken Access Control | VUL-03, VUL-04, VUL-11, VUL-14 | ✅ Found & fixed |
+| A02:2021 | Cryptographic Failures | VUL-02, VUL-09 | ✅ Found & fixed |
+| A03:2021 | Injection | VUL-01 (SQLi), VUL-05 (XSS), VUL-06 (SSTI) | ✅ Found & fixed |
+| A04:2021 | Insecure Design | N/A — The application was designed with RBAC from the outset; no architectural flows were identified that permanently bake in insecure design. The identified access control and session vulnerabilities (VUL-02, VUL-03) were implementation defects, not design-level flaws. |  N/A (justified) |
+| A05:2021 | Security Misconfiguration | VUL-08, VUL-12 | ✅ Found & fixed |
+| A06:2021 | Vulnerable and Outdated Components | VUL-07 (Flask CVE-2023-30861, Werkzeug CVE-2023-46136) | ✅ Found & fixed |
+| A07:2021 | Identification and Authentication Failures | VUL-10, VUL-11, VUL-13 | ✅ Found & fixed / accepted |
+| A08:2021 | Software and Data Integrity Failures | N/A — The application does not use auto-update mechanisms, CI/CD serialization (no deserialization endpoints), or unsigned code delivery paths. All dependencies are pinned and verified via pip-audit/Safety in CI. No insecure deserialization entry points exist. | N/A (justified) |
+| A09:2021 | Security Logging and Monitoring Failures | N/A (informational) — An `activity_log` table records login, logout, project, task, and feedback events with actor ID and timestamp. No alerting or log-forwarding to a SIEM is implemented; for a course demo application this is acceptable. In a production deployment, log aggregation and alerting on repeated failed logins and role changes would be required. | Informational |
+| A10:2021 | Server-Side Request Forgery (SSRF) | N/A — The application makes no outbound HTTP requests triggered by user-supplied URLs. There are no URL-fetch, webhook, or import-from-URL features. The attack surface for SSRF does not exist in the current codebase. | N/A (justified) |
+
+---
+
 ### 4.2 Detailed Findings
 
 ---
